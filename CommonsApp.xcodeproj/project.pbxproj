@@ -16,6 +16,11 @@
 			path = CommonsApp;
 			sourceTree = "<group>";
 		};
+		72767C103060ED250078788B /* New Folder */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = "New Folder";
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -32,6 +37,7 @@
 			children = (
 				72767BFA3060EC830078788B /* CommonsApp */,
 				72767BF93060EC830078788B /* Products */,
+				72767C103060ED250078788B /* New Folder */,
 			);
 			sourceTree = "<group>";
 		};
@@ -58,6 +64,7 @@
 			);
 			fileSystemSynchronizedGroups = (
 				72767BFA3060EC830078788B /* CommonsApp */,
+				72767C103060ED250078788B /* New Folder */,
 			);
 			name = CommonsApp;
 			productName = CommonsApp;
