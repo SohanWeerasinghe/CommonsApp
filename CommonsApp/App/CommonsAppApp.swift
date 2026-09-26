@@ -6,13 +6,18 @@
 //
 
 import SwiftUI
-import SwiftData
 
 @main
 struct CommonsApp: App {
+
+    // Create one AppStore for the whole app
+    // @StateObject means it gets created once and never destroyed
+    @StateObject private var store = AppStore()
+
     var body: some Scene {
         WindowGroup {
-            Text("Commons")  // temporary placeholder
+            RootView()
+                .environmentObject(store)
         }
     }
 }
