@@ -42,16 +42,19 @@ struct WaitingRoomView: View {
                 // the user taps the email link.
                 // Here we simulate it with a button.
                 VStack(spacing: 12) {
-                    Button("Simulate Email Tap") {
-                        store.simulateVerification()
+                    Button("I've verified my email") {
+                        Task {
+                            do {
+                                let verified = try await store.checkEmailVerification()
+                                if !verified {
+                                    print("Email is not verified yet.")
+                                }
+                            } catch {
+                                print("Verification check failed: \(error.localizedDescription)")
+                            }
+                        }
                     }
                     .buttonStyle(PrimaryButtonStyle())
-
-                    Button("Wrong email? Go back") {
-                        store.onboardingStage = .signIn
-                    }
-                    .font(Theme.ui(14))
-                    .foregroundStyle(Theme.textOnInkMuted)
                 }
                 .padding(24)
             }

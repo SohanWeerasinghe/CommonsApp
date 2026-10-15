@@ -11,7 +11,6 @@ import SwiftUI
 @main
 struct CommonsWidgetBundle: WidgetBundle {
     var body: some Widget {
-        CommonsWidget()
-        CommonsWidgetControl()
+        CommonsAppWidget()
     }
 }

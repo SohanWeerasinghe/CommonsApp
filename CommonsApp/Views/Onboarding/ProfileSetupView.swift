@@ -8,159 +8,180 @@
 import SwiftUI
 
 struct ProfileSetupView: View {
-
     @EnvironmentObject var store: AppStore
 
-    // One variable for each field the user fills in
-    @State private var name = ""
-    @State private var unit = ""
-    @State private var phone = ""
-    @State private var preference: Resident.ContactPreference = .push
-    @State private var showUnit = true
+    @State private var name = "Alex Morgan"
+    @State private var unit = "7B"
+    @State private var phone = "+94 77 123 4567"
 
     var body: some View {
         ZStack {
-            Theme.paper.ignoresSafeArea()
+            LinearGradient(
+                colors: [Color(hex: "FBFAF7"), Color(hex: "F1F3F6")],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .ignoresSafeArea()
 
-            ScrollView {
-                VStack(alignment: .leading, spacing: 24) {
-
-                    // Title
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("Set up your profile")
-                            .font(Theme.display(26))
-                            .foregroundStyle(Theme.textPrimary)
-
-                        Text("Your neighbours will see this information")
-                            .font(Theme.ui(14))
-                            .foregroundStyle(Theme.textMuted)
-                    }
-                    .padding(.top, 16)
-
-                    // Name field
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("FULL NAME")
-                            .font(Theme.ui(12, weight: .semibold))
-                            .foregroundStyle(Theme.textMuted)
-
-                        TextField("e.g. Priya Nair", text: $name)
-                            .padding(14)
-                            .background(Theme.card)
-                            .clipShape(RoundedRectangle(cornerRadius: 10))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 10)
-                                    .stroke(Theme.hairline, lineWidth: 1)
-                            )
-                    }
-
-                    // Unit number field
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("UNIT NUMBER")
-                            .font(Theme.ui(12, weight: .semibold))
-                            .foregroundStyle(Theme.textMuted)
-
-                        TextField("e.g. 4B", text: $unit)
-                            .padding(14)
-                            .background(Theme.card)
-                            .clipShape(RoundedRectangle(cornerRadius: 10))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 10)
-                                    .stroke(Theme.hairline, lineWidth: 1)
-                            )
-                    }
-
-                    // Phone field
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("PHONE (OPTIONAL)")
-                            .font(Theme.ui(12, weight: .semibold))
-                            .foregroundStyle(Theme.textMuted)
-
-                        TextField("e.g. 07700 900123", text: $phone)
-                            .keyboardType(.phonePad)
-                            .padding(14)
-                            .background(Theme.card)
-                            .clipShape(RoundedRectangle(cornerRadius: 10))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 10)
-                                    .stroke(Theme.hairline, lineWidth: 1)
-                            )
-                    }
-
-                    // Contact preference picker
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("CONTACT PREFERENCE")
-                            .font(Theme.ui(12, weight: .semibold))
-                            .foregroundStyle(Theme.textMuted)
-
-                        // Show all three options as buttons
-                        HStack(spacing: 10) {
-                            ForEach(Resident.ContactPreference.allCases, id: \.self) { option in
-                                Button(option.rawValue) {
-                                    preference = option
-                                }
-                                .font(Theme.ui(13, weight: .semibold))
-                                .padding(.vertical, 10)
-                                .frame(maxWidth: .infinity)
-                                .foregroundStyle(
-                                    preference == option ? Theme.ink : Theme.textMuted
-                                )
-                                .background(
-                                    preference == option ? Theme.brass : Theme.card
-                                )
-                                .clipShape(RoundedRectangle(cornerRadius: 8))
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 8)
-                                        .stroke(Theme.hairline, lineWidth: 1)
-                                )
-                            }
+            VStack(spacing: 0) {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 0) {
+                        ProfileSetupHeader {
+                            store.onboardingStage = .waitingRoom
                         }
-                    }
 
-                    // Show unit toggle
-                    HStack {
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text("Show unit to neighbours")
-                                .font(Theme.ui(14, weight: .semibold))
-                                .foregroundStyle(Theme.textPrimary)
-                            Text("Others can see your unit number on posts")
-                                .font(Theme.ui(12))
-                                .foregroundStyle(Theme.textMuted)
+                        AddPhotoView()
+                            .padding(.top, 30)
+
+                        VStack(spacing: 7) {
+                            ProfileSetupField(
+                                title: "NAME",
+                                text: $name,
+                                keyboardType: .default
+                            )
+
+                            ProfileSetupField(
+                                title: "UNIT",
+                                text: $unit,
+                                keyboardType: .default
+                            )
+
+                            ProfileSetupField(
+                                title: "PHONE",
+                                text: $phone,
+                                keyboardType: .phonePad
+                            )
                         }
-                        Spacer()
-                        Toggle("", isOn: $showUnit)
-                            .labelsHidden()
-                            .tint(Theme.brass)
-                    }
-                    .padding(14)
-                    .background(Theme.card)
-                    .clipShape(RoundedRectangle(cornerRadius: 10))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 10)
-                            .stroke(Theme.hairline, lineWidth: 1)
-                    )
+                        .padding(.top, 27)
 
-                    // Submit button
-                    Button("Join the Building") {
-                        store.completeProfileSetup(
-                            name: name,
-                            unit: unit,
-                            phone: phone,
-                            preference: preference,
-                            showUnit: showUnit
-                        )
+                        ProfilePrivacyCard()
+                            .padding(.top, 40)
                     }
-                    .buttonStyle(PrimaryButtonStyle())
-                    // Only active when name and unit are filled in
-                    .disabled(name.isEmpty || unit.isEmpty)
-                    .opacity(name.isEmpty || unit.isEmpty ? 0.5 : 1)
-
+                    .padding(.horizontal, 20)
                 }
-                .padding(16)
+                .scrollIndicators(.hidden)
+
+                Button("Finish setup") {
+                    store.completeProfileSetup(
+                        name: name,
+                        unit: unit,
+                        phone: phone,
+                        preference: .push,
+                        showUnit: true
+                    )
+                }
+                .font(.system(size: 13, weight: .bold))
+                .foregroundStyle(.white)
+                .frame(maxWidth: .infinity)
+                .frame(height: 52)
+                .background(Color(hex: "7061CF"))
+                .clipShape(Capsule())
+                .disabled(name.isEmpty || unit.isEmpty)
+                .opacity(name.isEmpty || unit.isEmpty ? 0.5 : 1)
+                .padding(.horizontal, 20)
+                .padding(.bottom, 56)
             }
         }
     }
 }
 
+struct ProfileSetupHeader: View {
+    let goBack: () -> Void
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 0) {
+            Button(action: goBack) {
+                Image(systemName: "chevron.left")
+                    .font(.system(size: 18, weight: .medium))
+                    .foregroundStyle(Color(hex: "182134"))
+                    .frame(width: 28, height: 44, alignment: .leading)
+            }
+
+            VStack(alignment: .leading, spacing: 7) {
+                Text("PROFILE SETUP")
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundStyle(Color(hex: "7F8795"))
+
+                Text("Make it yours")
+                    .font(.system(size: 25, weight: .bold))
+                    .foregroundStyle(Color(hex: "182134"))
+            }
+        }
+        .padding(.top, 2)
+    }
+}
+
+struct AddPhotoView: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("ADD A PHOTO")
+                .font(.system(size: 9, weight: .bold))
+                .foregroundStyle(Color(hex: "7F8795"))
+
+            ZStack {
+                Circle()
+                    .fill(Color(hex: "EFECFF"))
+
+                Image(systemName: "plus")
+                    .font(.system(size: 22, weight: .light))
+                    .foregroundStyle(Color(hex: "6F61D7"))
+            }
+            .frame(width: 86, height: 86)
+            .padding(.leading, 9)
+        }
+    }
+}
+
+struct ProfileSetupField: View {
+    let title: LocalizedStringResource
+    @Binding var text: String
+    let keyboardType: UIKeyboardType
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .font(.system(size: 9, weight: .bold))
+                .foregroundStyle(Color(hex: "7F8795"))
+
+            TextField("", text: $text)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(Color(hex: "182134"))
+                .keyboardType(keyboardType)
+                .padding(.horizontal, 16)
+                .frame(height: 51)
+                .background(.white.opacity(0.78))
+                .clipShape(RoundedRectangle(cornerRadius: 15))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 15)
+                        .stroke(Color(hex: "E0E3E8"), lineWidth: 1)
+                }
+        }
+    }
+}
+
+struct ProfilePrivacyCard: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Name + unit visible to neighbours")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(Color(hex: "182134"))
+
+            Text("Phone stays private")
+                .font(.system(size: 10))
+                .foregroundStyle(Color(hex: "8E96A5"))
+        }
+        .padding(.horizontal, 17)
+        .frame(maxWidth: .infinity, minHeight: 90, alignment: .leading)
+        .background(.white.opacity(0.78))
+        .clipShape(RoundedRectangle(cornerRadius: 18))
+        .overlay {
+            RoundedRectangle(cornerRadius: 18)
+                .stroke(Color(hex: "E0E3E8"), lineWidth: 1)
+        }
+    }
+}
+
 #Preview {
-    ProfileSetupView().environmentObject(AppStore())
+    ProfileSetupView()
+        .environmentObject(AppStore())
 }

@@ -12,3 +12,6 @@ struct ResidentProfileView: View {
         Text("Post Detail")
     }
 }
+#Preview {
+    ResidentProfileView().environmentObject(AppStore())
+}

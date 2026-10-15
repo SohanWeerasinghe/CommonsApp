@@ -8,77 +8,200 @@
 import WidgetKit
 import SwiftUI
 
-struct Provider: TimelineProvider {
-    func placeholder(in context: Context) -> SimpleEntry {
-        SimpleEntry(date: Date(), emoji: "😀")
+// MARK: - Timeline Entry
+// This is one snapshot of data the widget displays
+
+struct CommonsEntry: TimelineEntry {
+    // WidgetKit requires a date for each entry
+    let date: Date
+    let announcement: String
+    let nextEventTitle: String
+    let nextEventLocation: String
+}
+
+// MARK: - Timeline Provider
+// This tells WidgetKit what data to show and when to refresh
+
+struct CommonsProvider: TimelineProvider {
+
+    // Placeholder shown while widget loads
+    func placeholder(in context: Context) -> CommonsEntry {
+        CommonsEntry(
+            date: Date(),
+            announcement: "Water shut off Tuesday 10am",
+            nextEventTitle: "Rooftop Social",
+            nextEventLocation: "Rooftop Terrace"
+        )
     }
 
-    func getSnapshot(in context: Context, completion: @escaping (SimpleEntry) -> ()) {
-        let entry = SimpleEntry(date: Date(), emoji: "😀")
-        completion(entry)
+    // Snapshot shown in widget gallery preview
+    func getSnapshot(in context: Context,
+                     completion: @escaping (CommonsEntry) -> Void) {
+        completion(placeholder(in: context))
     }
 
-    func getTimeline(in context: Context, completion: @escaping (Timeline<Entry>) -> ()) {
-        var entries: [SimpleEntry] = []
+    // Real timeline — called when widget needs to refresh
+    func getTimeline(in context: Context,
+                     completion: @escaping (Timeline<CommonsEntry>) -> Void) {
 
-        // Generate a timeline consisting of five entries an hour apart, starting from the current date.
-        let currentDate = Date()
-        for hourOffset in 0 ..< 5 {
-            let entryDate = Calendar.current.date(byAdding: .hour, value: hourOffset, to: currentDate)!
-            let entry = SimpleEntry(date: entryDate, emoji: "😀")
-            entries.append(entry)
-        }
+        // Read data saved by the main app
+        let defaults = UserDefaults(suiteName: "group.com.yourname.commonsapp")
 
-        let timeline = Timeline(entries: entries, policy: .atEnd)
+        let announcement = defaults?.string(forKey: "pinnedAnnouncement")
+            ?? "No announcements"
+
+        let eventTitle = defaults?.string(forKey: "nextEventTitle")
+            ?? "No upcoming events"
+
+        let eventLocation = defaults?.string(forKey: "nextEventLocation")
+            ?? ""
+
+        // Create one entry with the current data
+        let entry = CommonsEntry(
+            date: Date(),
+            announcement: announcement,
+            nextEventTitle: eventTitle,
+            nextEventLocation: eventLocation
+        )
+
+        // Refresh the widget every 30 minutes
+        let refreshDate = Calendar.current.date(
+            byAdding: .minute,
+            value: 30,
+            to: Date()
+        )!
+
+        let timeline = Timeline(entries: [entry], policy: .after(refreshDate))
         completion(timeline)
     }
-
-//    func relevances() async -> WidgetRelevances<Void> {
-//        // Generate a list containing the contexts this widget is relevant in.
-//    }
 }
 
-struct SimpleEntry: TimelineEntry {
-    let date: Date
-    let emoji: String
-}
+// MARK: - Small Widget View
 
-struct CommonsWidgetEntryView : View {
-    var entry: Provider.Entry
+struct CommonsWidgetSmallView: View {
+
+    let entry: CommonsEntry
 
     var body: some View {
-        VStack {
-            Text("Time:")
-            Text(entry.date, style: .time)
+        ZStack {
+            // Dark navy background
+            Color(red: 0.11, green: 0.14, blue: 0.20)
 
-            Text("Emoji:")
-            Text(entry.emoji)
+            VStack(alignment: .leading, spacing: 8) {
+
+                // App name
+                Text("Commons")
+                    .font(.system(size: 13, weight: .semibold, design: .serif))
+                    .foregroundStyle(Color(red: 0.74, green: 0.60, blue: 0.31))
+
+                Spacer()
+
+                // Announcement text
+                Text(entry.announcement)
+                    .font(.system(size: 12, weight: .regular))
+                    .foregroundStyle(Color(red: 0.95, green: 0.94, blue: 0.90))
+                    .lineLimit(3)
+            }
+            .padding(14)
         }
     }
 }
 
-struct CommonsWidget: Widget {
-    let kind: String = "CommonsWidget"
+// MARK: - Medium Widget View
 
-    var body: some WidgetConfiguration {
-        StaticConfiguration(kind: kind, provider: Provider()) { entry in
-            if #available(iOS 17.0, *) {
-                CommonsWidgetEntryView(entry: entry)
-                    .containerBackground(.fill.tertiary, for: .widget)
-            } else {
-                CommonsWidgetEntryView(entry: entry)
-                    .padding()
-                    .background()
+struct CommonsWidgetMediumView: View {
+
+    let entry: CommonsEntry
+
+    var body: some View {
+        ZStack {
+            Color(red: 0.11, green: 0.14, blue: 0.20)
+
+            HStack(spacing: 0) {
+
+                // Left side — announcement
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("PINNED")
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundStyle(Color(red: 0.74, green: 0.60, blue: 0.31))
+
+                    Text(entry.announcement)
+                        .font(.system(size: 13))
+                        .foregroundStyle(Color(red: 0.95, green: 0.94, blue: 0.90))
+                        .lineLimit(3)
+
+                    Spacer()
+
+                    Text("Commons")
+                        .font(.system(size: 11, weight: .semibold, design: .serif))
+                        .foregroundStyle(Color(red: 0.74, green: 0.60, blue: 0.31))
+                }
+                .padding(14)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+                // Divider
+                Rectangle()
+                    .fill(Color(red: 0.23, green: 0.27, blue: 0.37))
+                    .frame(width: 1)
+
+                // Right side — next event
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("NEXT EVENT")
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundStyle(Color(red: 0.74, green: 0.60, blue: 0.31))
+
+                    Text(entry.nextEventTitle)
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(Color(red: 0.95, green: 0.94, blue: 0.90))
+                        .lineLimit(2)
+
+                    Text(entry.nextEventLocation)
+                        .font(.system(size: 11))
+                        .foregroundStyle(Color(red: 0.58, green: 0.64, blue: 0.71))
+                        .lineLimit(1)
+
+                    Spacer()
+                }
+                .padding(14)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
-        .configurationDisplayName("My Widget")
-        .description("This is an example widget.")
     }
 }
 
+// MARK: - Widget Configuration
+
+struct CommonsAppWidget: Widget {
+
+    // This identifier must be unique
+    let kind: String = "CommonsAppWidget"
+
+    var body: some WidgetConfiguration {
+        StaticConfiguration(kind: kind, provider: CommonsProvider()) { entry in
+            // Show different layouts based on widget size
+            GeometryReader { geo in
+                if geo.size.width < 170 {
+                    CommonsWidgetSmallView(entry: entry)
+                } else {
+                    CommonsWidgetMediumView(entry: entry)
+                }
+            }
+        }
+        .configurationDisplayName("Commons")
+        .description("Building announcements and upcoming events")
+        .supportedFamilies([.systemSmall, .systemMedium])
+    }
+}
+
+// MARK: - Preview
+
 #Preview(as: .systemSmall) {
-    CommonsWidget()
+    CommonsAppWidget()
 } timeline: {
-    SimpleEntry(date: .now, emoji: "😀")
-    SimpleEntry(date: .now, emoji: "🤩")
+    CommonsEntry(
+        date: Date(),
+        announcement: "Water shut off Tuesday 10am–2pm",
+        nextEventTitle: "Rooftop Social",
+        nextEventLocation: "Rooftop Terrace"
+    )
 }

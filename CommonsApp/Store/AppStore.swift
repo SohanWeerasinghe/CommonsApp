@@ -8,6 +8,9 @@
 import Foundation
 import SwiftUI
 import Combine
+import LocalAuthentication
+import FirebaseAuth
+import FirebaseFirestore
 
 final class AppStore: ObservableObject {
     //Onboarding
@@ -53,11 +56,25 @@ final class AppStore: ObservableObject {
     //Onboarding Actions
     
     func sendMagicLink() {
-        onboardingStage = .waitingRoom
+        // Replaced by Firebase email/password registration.
+        // Authentication will be handled by the sign-in form.
     }
-    
-    func simulateVerification() {
-        onboardingStage = .profileSetup
+
+    func checkEmailVerification() async throws -> Bool {
+        guard let user = Auth.auth().currentUser else {
+            return false
+        }
+
+        try await user.reload()
+
+        if user.isEmailVerified {
+            await MainActor.run {
+                onboardingStage = .profileSetup
+            }
+            return true
+        }
+
+        return false
     }
     
     func completeProfileSetup(name: String, unit: String, phone: String, preference: Resident.ContactPreference, showUnit: Bool) {
@@ -72,6 +89,55 @@ final class AppStore: ObservableObject {
         
         // Move to active stage
         onboardingStage = .active
+    }
+    
+    //use to save the user data to firestore
+    
+    @MainActor
+    func saveResidentProfile(
+        name: String,
+        unit: String,
+        phone: String,
+        preference: Resident.ContactPreference,
+        showUnit: Bool
+    ) async throws {
+        guard let user = Auth.auth().currentUser,
+              let email = user.email else {
+            throw NSError(
+                domain: "CommonsApp",
+                code: 401,
+                userInfo: [
+                    NSLocalizedDescriptionKey: "Please sign in before completing your profile."
+                ]
+            )
+        }
+
+        let profileData: [String: Any] = [
+            "name": name.trimmingCharacters(in: .whitespacesAndNewlines),
+            "unit": unit.trimmingCharacters(in: .whitespacesAndNewlines),
+            "phone": phone.trimmingCharacters(in: .whitespacesAndNewlines),
+            "email": email,
+            "contactPreference": "push",
+            "showUnitToNeighbors": showUnit,
+            "approvalStatus": "pending",
+            "createdAt": FieldValue.serverTimestamp()
+        ]
+
+        try await Firestore.firestore()
+            .collection("users")
+            .document(user.uid)
+            .setData(profileData)
+
+        currentResident = Resident(
+            name: name,
+            unit: unit,
+            phone: phone,
+            contactPreference: preference,
+            showUnitToNeighbors: showUnit
+        )
+
+        pendingEmail = email
+        onboardingStage = .waitingRoom
     }
     
     //Feed Actions
@@ -96,7 +162,7 @@ final class AppStore: ObservableObject {
         posts.insert(post, at: 0)
     }
     
-    func toggleLike(post: Post) {
+    func toggleLike(_ post: Post) {
         // Find the matching post and add 1 like
         for index in 0..<posts.count {
             if posts[index].id == post.id {
@@ -108,7 +174,7 @@ final class AppStore: ObservableObject {
     
     //Lend & Borrow
     
-    func requestItem(item: SharedItem) -> ChatThread {
+    func requestItem(_ item: SharedItem) -> ChatThread {
         // Check if we already have a chat with this neighbor
         for thread in chatThreads {
             if thread.neighborUnit == item.ownerUnit {
@@ -185,6 +251,18 @@ final class AppStore: ObservableObject {
                 break
             }
         }
+    }
+    
+    func getSlots(for amenity: Amenity) -> [BookingSlot] {
+        // Go through all slots and return only the ones
+        // that belong to this amenity
+        var result: [BookingSlot] = []
+        for slot in bookingSlots {
+            if slot.amenityID == amenity.id {
+                result.append(slot)
+            }
+        }
+        return result
     }
     
     //Chat
@@ -295,25 +373,119 @@ final class AppStore: ObservableObject {
     }
     
     private func seedBookingSlots() {
-        // Check if we have amenities available
-        if amenities.isEmpty { return }
-        
-        let communityRoom = amenities[0]
-        let now = Date()
-        
-        // Create 10 sample booking slots using a loop
+        // Find Community Room by name instead of guessing the index
+        var communityRoom: Amenity? = nil
+        for amenity in amenities {
+            if amenity.name == "Community Room" {
+                communityRoom = amenity
+                break
+            }
+        }
+
+        // If we didn't find it, stop here
+        if communityRoom == nil { return }
+
+        let cal = Calendar.current
+        // Start at 9am today
+        let base = cal.date(bySettingHour: 9, minute: 0, second: 0, of: Date())!
+
         bookingSlots = []
         for index in 0..<10 {
-            // Mark slot as booked if it's index 2, 5, or 8
             let isSlotBooked = (index == 2 || index == 5 || index == 8)
-            
+
+            // Each slot is 1 hour apart
+            let slotTime = cal.date(byAdding: .hour, value: index, to: base)!
+
             let slot = BookingSlot(
-                amenityID: communityRoom.id,
-                start: now,
+                amenityID: communityRoom!.id,
+                start: slotTime,
                 isBooked: isSlotBooked
             )
             bookingSlots.append(slot)
         }
+    }
+    
+    //App Lock (Face ID / Touch ID)
+
+    func lockApp() {
+        // Only lock if the user has turned on app lock
+        if appLockEnabled {
+            isLocked = true
+        }
+    }
+    
+    func saveDataForWidget() {
+        // We use UserDefaults with our App Group to share data
+        // with the widget extension
+        let defaults = UserDefaults(suiteName: "group.com.yourname.commonsapp")
+
+        // Save the pinned announcement text
+        defaults?.set(pinnedAnnouncementText, forKey: "pinnedAnnouncement")
+
+        // Save the next event title if there is one
+        if let nextEvent = events.first {
+            defaults?.set(nextEvent.title, forKey: "nextEventTitle")
+            defaults?.set(nextEvent.location, forKey: "nextEventLocation")
+        }
+    }
+
+    func unlockWithBiometrics(completion: @escaping (Bool) -> Void) {
+        // Import LocalAuthentication to use Face ID
+        let context = LAContext()
+        var error: NSError?
+
+        // Check if Face ID or Touch ID is available on this device
+        let canUseBiometrics = context.canEvaluatePolicy(
+            .deviceOwnerAuthenticationWithBiometrics,
+            error: &error
+        )
+
+        if canUseBiometrics {
+            // Ask the user to authenticate
+            context.evaluatePolicy(
+                .deviceOwnerAuthenticationWithBiometrics,
+                localizedReason: "Unlock Commons"
+            ) { success, error in
+                // Come back to the main thread to update the UI
+                DispatchQueue.main.async {
+                    if success {
+                        self.isLocked = false
+                    }
+                    completion(success)
+                }
+            }
+        } else {
+            // Biometrics not available on this device
+            completion(false)
+        }
+    }
+    
+    func pinAnnouncement(_ text: String) {
+        // Update pinned text
+        pinnedAnnouncementText = text
+
+        // Add as pinned post on the wall
+        let newPost = Post(
+            authorName: "Management",
+            authorUnit: "—",
+            timestamp: Date(),
+            category: .announcement,
+            text: text,
+            isPinned: true
+        )
+
+        // Remove old pinned posts
+        var updatedPosts: [Post] = []
+        for post in posts {
+            if !post.isPinned {
+                updatedPosts.append(post)
+            }
+        }
+        updatedPosts.insert(newPost, at: 0)
+        posts = updatedPosts
+
+        // Save for widget
+        saveDataForWidget()
     }
 }
 
