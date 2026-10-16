@@ -142,7 +142,7 @@ struct ChatThread: Identifiable, Codable, Equatable {
 //Admin Structure
 
 struct PendingResident: Identifiable, Codable, Equatable {
-    var id          = UUID()
+    var id: String
     var name: String
     var unit: String
     var requestedAt: Date

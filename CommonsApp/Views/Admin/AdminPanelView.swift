@@ -16,6 +16,8 @@ struct AdminPanelView: View {
     
     // Shows a confirmation message after pinning
     @State private var didPin = false
+    @State private var isLoadingResidents = false
+    @State private var residentsError = ""
     
     var body: some View {
         ZStack {
@@ -45,9 +47,66 @@ struct AdminPanelView: View {
                             
                         } else {
                             
-                            // Show each pending resident
                             ForEach(store.pendingResidents) { resident in
-                                // PendingResidentRow(resident: resident)
+                                PlaqueCard {
+                                    VStack(alignment: .leading, spacing: 6) {
+                                        Text(resident.name)
+                                            .font(Theme.ui(15, weight: .semibold))
+                                            .foregroundStyle(Theme.textPrimary)
+
+                                        Text("Unit: \(resident.unit)")
+                                            .font(Theme.ui(13))
+                                            .foregroundStyle(Theme.textMuted)
+
+                                        Text("Application pending")
+                                            .font(Theme.ui(12))
+                                            .foregroundStyle(Theme.textMuted)
+
+                                        //Approve decline buttons for pending residents
+                                        HStack(spacing: 12) {
+                                            Button("Approve") {
+                                                Task {
+                                                    do {
+                                                        try await store.updateResidentApproval(
+                                                            residentID: resident.id,
+                                                            approve: true
+                                                        )
+                                                    } catch {
+                                                        residentsError = error.localizedDescription
+                                                    }
+                                                }
+                                            }
+                                            .buttonStyle(.borderedProminent)
+                                            .tint(.green)
+
+                                            Button("Decline") {
+                                                Task {
+                                                    do {
+                                                        try await store.updateResidentApproval(
+                                                            residentID: resident.id,
+                                                            approve: false
+                                                        )
+                                                    } catch {
+                                                        residentsError = error.localizedDescription
+                                                    }
+                                                }
+                                            }
+                                            .buttonStyle(.bordered)
+                                            .tint(.red)
+                                        }
+                                        .padding(.top, 8)
+                                    }
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                }
+                                if isLoadingResidents {
+                                    ProgressView("Loading resident applications...")
+                                }
+
+                                if !residentsError.isEmpty {
+                                    Text(residentsError)
+                                        .font(.caption)
+                                        .foregroundStyle(.red)
+                                }
                             }
                         }
                     }
@@ -154,6 +213,23 @@ struct AdminPanelView: View {
         }
         .navigationTitle("Admin Panel")
         .navigationBarTitleDisplayMode(.large)
+        .task {
+            isLoadingResidents = true
+            residentsError = ""
+
+            // Clear sample residents before loading real applications.
+            store.pendingResidents = []
+
+            defer {
+                isLoadingResidents = false
+            }
+
+            do {
+                try await store.loadPendingResidents()
+            } catch {
+                residentsError = error.localizedDescription
+            }
+        }
     }
     
     // Pins the announcement to the building wall

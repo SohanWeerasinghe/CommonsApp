@@ -183,6 +183,10 @@ final class AppStore: ObservableObject {
             )
         }
 
+        print("PROFILE DEBUG - Auth UID:", user.uid,
+              "Email:", email,
+              "Verified:", user.isEmailVerified)
+
         let profileData: [String: Any] = [
             "name": name.trimmingCharacters(in: .whitespacesAndNewlines),
             "unit": unit.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -198,30 +202,7 @@ final class AppStore: ObservableObject {
             .collection("users")
             .document(user.uid)
 
-        try await Firestore.firestore().runTransaction { transaction, errorPointer in
-            do {
-                let existingProfile = try transaction.getDocument(profileReference)
-
-                if existingProfile.exists {
-                    errorPointer?.pointee = NSError(
-                        domain: "CommonsApp",
-                        code: 409,
-                        userInfo: [
-                            NSLocalizedDescriptionKey:
-                                "Your resident profile already exists. Please sign in instead."
-                        ]
-                    )
-                    return nil
-                }
-
-                transaction.setData(profileData, forDocument: profileReference)
-                return nil
-
-            } catch {
-                errorPointer?.pointee = error as NSError
-                return nil
-            }
-        }
+        try await profileReference.setData(profileData)
 
         currentResident = Resident(
             name: name,
@@ -235,6 +216,97 @@ final class AppStore: ObservableObject {
         onboardingStage = .waitingRoom
     }
     
+    // Load pending resident applications for the administrator.
+    @MainActor
+    func loadPendingResidents() async throws {
+
+        guard let user = Auth.auth().currentUser else {
+            throw NSError(
+                domain: "CommonsApp",
+                code: 401,
+                userInfo: [
+                    NSLocalizedDescriptionKey: "Please sign in as an administrator."
+                ]
+            )
+        }
+
+        let tokenResult = try await user.getIDTokenResult(forcingRefresh: true)
+
+        guard tokenResult.claims["admin"] as? Bool == true else {
+            throw NSError(
+                domain: "CommonsApp",
+                code: 403,
+                userInfo: [
+                    NSLocalizedDescriptionKey: "Administrator access required."
+                ]
+            )
+        }
+
+        let snapshot = try await Firestore.firestore()
+            .collection("users")
+            .whereField("approvalStatus", isEqualTo: "pending")
+            .getDocuments(source: .server)
+
+        pendingResidents = snapshot.documents.compactMap { document in
+            let data = document.data()
+
+            guard let name = data["name"] as? String,
+                  let unit = data["unit"] as? String else {
+                return nil
+            }
+
+            let requestedAt = (data["createdAt"] as? Timestamp)?.dateValue() ?? Date()
+
+            return PendingResident(
+                id: document.documentID,
+                name: name,
+                unit: unit,
+                requestedAt: requestedAt
+            )
+        }
+    }
+
+    // Approve or decline a pending resident.
+    @MainActor
+    func updateResidentApproval(
+        residentID: String,
+        approve: Bool
+    ) async throws {
+
+        guard let user = Auth.auth().currentUser else {
+            throw NSError(
+                domain: "CommonsApp",
+                code: 401,
+                userInfo: [
+                    NSLocalizedDescriptionKey: "Please sign in as an administrator."
+                ]
+            )
+        }
+
+        let tokenResult = try await user.getIDTokenResult(forcingRefresh: true)
+
+        guard tokenResult.claims["admin"] as? Bool == true else {
+            throw NSError(
+                domain: "CommonsApp",
+                code: 403,
+                userInfo: [
+                    NSLocalizedDescriptionKey: "Administrator access required."
+                ]
+            )
+        }
+
+        let status = approve ? "approved" : "declined"
+
+        try await Firestore.firestore()
+            .collection("users")
+            .document(residentID)
+            .updateData([
+                "approvalStatus": status
+            ])
+
+        try await loadPendingResidents()
+    }
+
     //Feed Actions
     
     func addPost(text: String, category: Post.Category, hasPhoto: Bool) {
@@ -452,8 +524,8 @@ final class AppStore: ObservableObject {
         
         //Create sample pending residents
         pendingResidents = [
-            PendingResident(name: "Priya Nair", unit: "4B", requestedAt: now),
-            PendingResident(name: "Tom Alcott", unit: "11D", requestedAt: now)
+            PendingResident(id: "demo-priya", name: "Priya Nair", unit: "4B", requestedAt: now),
+            PendingResident(id: "demo-tom", name: "Tom Alcott", unit: "11D", requestedAt: now)
         ]
         
         pinnedAnnouncementText = "Water shut off Tuesday, 10am–2pm."
