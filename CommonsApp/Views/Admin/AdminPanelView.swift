@@ -18,6 +18,7 @@ struct AdminPanelView: View {
     @State private var didPin = false
     @State private var isLoadingResidents = false
     @State private var residentsError = ""
+    @State private var processingResidentID: String? = nil
     
     var body: some View {
         ZStack {
@@ -60,12 +61,20 @@ struct AdminPanelView: View {
 
                                         Text("Application pending")
                                             .font(Theme.ui(12))
+
                                             .foregroundStyle(Theme.textMuted)
 
                                         //Approve decline buttons for pending residents
                                         HStack(spacing: 12) {
                                             Button("Approve") {
+                                                guard processingResidentID == nil else { return }
+
+                                                processingResidentID = resident.id
+                                                residentsError = ""
+
                                                 Task {
+                                                    defer { processingResidentID = nil }
+
                                                     do {
                                                         try await store.updateResidentApproval(
                                                             residentID: resident.id,
@@ -78,9 +87,17 @@ struct AdminPanelView: View {
                                             }
                                             .buttonStyle(.borderedProminent)
                                             .tint(.green)
+                                            .disabled(processingResidentID != nil)
 
                                             Button("Decline") {
+                                                guard processingResidentID == nil else { return }
+
+                                                processingResidentID = resident.id
+                                                residentsError = ""
+
                                                 Task {
+                                                    defer { processingResidentID = nil }
+
                                                     do {
                                                         try await store.updateResidentApproval(
                                                             residentID: resident.id,
@@ -93,6 +110,11 @@ struct AdminPanelView: View {
                                             }
                                             .buttonStyle(.bordered)
                                             .tint(.red)
+                                            .disabled(processingResidentID != nil)
+
+                                            if processingResidentID == resident.id {
+                                                ProgressView()
+                                            }
                                         }
                                         .padding(.top, 8)
                                     }
