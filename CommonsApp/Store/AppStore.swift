@@ -77,6 +77,57 @@ final class AppStore: ObservableObject {
         return false
     }
     
+    //checks the signed-in resident's Firestore profile and routes them correctly
+    @MainActor
+    func loadResidentAccountStatus() async throws {
+        guard let user = Auth.auth().currentUser else {
+            onboardingStage = .signIn
+            return
+        }
+
+        try await user.reload()
+
+        let document = try await Firestore.firestore()
+            .collection("users")
+            .document(user.uid)
+            .getDocument(source: .server)
+
+        guard document.exists, let data = document.data() else {
+            onboardingStage = .profileSetup
+            return
+        }
+
+        let name = data["name"] as? String ?? ""
+        let unit = data["unit"] as? String ?? ""
+        let phone = data["phone"] as? String ?? ""
+        let showUnit = data["showUnitToNeighbors"] as? Bool ?? true
+
+        currentResident = Resident(
+            name: name,
+            unit: unit,
+            phone: phone,
+            contactPreference: .push,
+            showUnitToNeighbors: showUnit
+        )
+
+        pendingEmail = user.email ?? ""
+
+        let approvalStatus = data["approvalStatus"] as? String ?? "pending"
+
+        if !user.isEmailVerified {
+            onboardingStage = .waitingRoom
+        } else {
+            switch approvalStatus {
+            case "approved":
+                onboardingStage = .active
+            case "declined":
+                onboardingStage = .accessDeclined
+            default:
+                onboardingStage = .pendingApproval
+            }
+        }
+    }
+    
     func completeProfileSetup(name: String, unit: String, phone: String, preference: Resident.ContactPreference, showUnit: Bool) {
         // Create the resident with provided details
         currentResident = Resident(
