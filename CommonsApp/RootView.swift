@@ -12,14 +12,15 @@ struct RootView: View {
             // Show the right screen based on onboarding stage
             if store.onboardingStage == .signIn {
                 SignInView()
-
-            } else if store.onboardingStage == .waitingRoom {
-                WaitingRoomView()
-
             } else if store.onboardingStage == .profileSetup {
                 ProfileSetupView()
-
-            } else {
+            } else if store.onboardingStage == .waitingRoom {
+                WaitingRoomView()
+            } else if store.onboardingStage == .pendingApproval {
+                Text("Your profile is waiting for admin approval.")
+            } else if store.onboardingStage == .accessDeclined {
+                Text("Your resident application was declined.")
+            } else if store.onboardingStage == .active {
                 MainTabView()
             }
 
