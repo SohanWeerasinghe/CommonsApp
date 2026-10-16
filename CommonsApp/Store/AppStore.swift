@@ -60,21 +60,21 @@ final class AppStore: ObservableObject {
         // Authentication will be handled by the sign-in form.
     }
 
+    @MainActor
     func checkEmailVerification() async throws -> Bool {
         guard let user = Auth.auth().currentUser else {
+            onboardingStage = .signIn
             return false
         }
 
         try await user.reload()
 
-        if user.isEmailVerified {
-            await MainActor.run {
-                onboardingStage = .profileSetup
-            }
-            return true
+        guard user.isEmailVerified else {
+            return false
         }
 
-        return false
+        try await loadResidentAccountStatus()
+        return true
     }
     
     //checks the signed-in resident's Firestore profile and routes them correctly
@@ -126,20 +126,6 @@ final class AppStore: ObservableObject {
                 onboardingStage = .pendingApproval
             }
         }
-    }
-    
-    func completeProfileSetup(name: String, unit: String, phone: String, preference: Resident.ContactPreference, showUnit: Bool) {
-        // Create the resident with provided details
-        currentResident = Resident(
-            name: name,
-            unit: unit,
-            phone: phone,
-            contactPreference: preference,
-            showUnitToNeighbors: showUnit
-        )
-        
-        // Move to active stage
-        onboardingStage = .active
     }
     
     //use to save the user data to firestore
