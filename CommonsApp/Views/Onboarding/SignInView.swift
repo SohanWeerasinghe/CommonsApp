@@ -172,7 +172,7 @@ private struct EmailAuthFormView: View {
                 try await result.user.sendEmailVerification()
 
                 store.pendingEmail = cleanEmail
-                store.onboardingStage = .waitingRoom
+                store.onboardingStage = .profileSetup
             } else {
                 let result = try await Auth.auth().signIn(
                     withEmail: cleanEmail,
