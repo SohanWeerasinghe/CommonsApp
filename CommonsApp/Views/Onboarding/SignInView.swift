@@ -181,14 +181,7 @@ private struct EmailAuthFormView: View {
 
                 store.pendingEmail = cleanEmail
 
-                try await result.user.reload()
-
-                if result.user.isEmailVerified {
-                    // Temporary until we implement Firestore profile lookup.
-                    store.onboardingStage = .profileSetup
-                } else {
-                    store.onboardingStage = .waitingRoom
-                }
+                try await store.loadResidentAccountStatus()
             }
 
             dismiss()
