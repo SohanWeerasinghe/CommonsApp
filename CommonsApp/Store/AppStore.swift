@@ -111,6 +111,16 @@ final class AppStore: ObservableObject {
 
         try await user.reload()
 
+        // Check the administrator role using Firebase's verified ID token.
+        let tokenResult = try await user.getIDTokenResult(forcingRefresh: true)
+
+        let isAdmin = tokenResult.claims["admin"] as? Bool == true
+
+        if isAdmin {
+            onboardingStage = .admin
+            return
+        }
+
         let document = try await Firestore.firestore()
             .collection("users")
             .document(user.uid)

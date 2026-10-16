@@ -125,6 +125,23 @@ struct RootView: View {
                 .padding(24)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
 
+                //switch between admin and normal user based on email u signed in
+            } else if store.onboardingStage == .admin {
+                NavigationStack {
+                    AdminPanelView()
+                        .toolbar {
+                            ToolbarItem(placement: .topBarTrailing) {
+                                Button("Sign Out") {
+                                    do {
+                                        try store.signOutResident()
+                                    } catch {
+                                        refreshError = error.localizedDescription
+                                    }
+                                }
+                            }
+                        }
+                }
+
             } else if store.onboardingStage == .active {
                 MainTabView()
             }

@@ -29,10 +29,11 @@ struct Resident: Identifiable, Codable, Equatable {
 enum OnboardingStage {
     case signIn
     case profileSetup
-    case waitingRoom      
+    case waitingRoom
     case pendingApproval
     case accessDeclined
     case active
+    case admin
     case loading
 }
 
