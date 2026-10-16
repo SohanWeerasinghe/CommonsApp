@@ -1,50 +1,106 @@
+
 import SwiftUI
 
 struct RootView: View {
 
     @EnvironmentObject var store: AppStore
 
-    // Watches whether the app is in the foreground or background
     @Environment(\.scenePhase) private var scenePhase
+
+    @State private var isRefreshing = false
+    @State private var refreshError = ""
 
     var body: some View {
         ZStack {
-            // Show the right screen based on onboarding stage
+            // Display one screen based on the resident's account status
             if store.onboardingStage == .loading {
                 VStack(spacing: 16) {
                     ProgressView()
+
                     Text("Checking your account...")
                         .font(.system(size: 14))
                         .foregroundStyle(.secondary)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+
             } else if store.onboardingStage == .signIn {
                 SignInView()
-            }
-            if store.onboardingStage == .signIn {
-                SignInView()
+
             } else if store.onboardingStage == .profileSetup {
                 ProfileSetupView()
+
             } else if store.onboardingStage == .waitingRoom {
                 WaitingRoomView()
+
             } else if store.onboardingStage == .pendingApproval {
-                Text("Your profile is waiting for admin approval.")
+                VStack(spacing: 20) {
+                    Image(systemName: "clock.badge.checkmark")
+                        .font(.system(size: 44))
+                        .foregroundStyle(.secondary)
+
+                    Text("Waiting for Admin Approval")
+                        .font(.title3.bold())
+
+                    Text("Your profile has been submitted. Please wait for an administrator to approve your account.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+
+                    Button {
+                        Task {
+                            isRefreshing = true
+                            refreshError = ""
+
+                            defer {
+                                isRefreshing = false
+                            }
+
+                            do {
+                                try await store.loadResidentAccountStatus()
+                            } catch {
+                                refreshError = error.localizedDescription
+                            }
+                        }
+                    } label: {
+                        HStack(spacing: 8) {
+                            if isRefreshing {
+                                ProgressView()
+                            } else {
+                                Image(systemName: "arrow.clockwise")
+                            }
+
+                            Text(isRefreshing ? "Checking..." : "Refresh Status")
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(14)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(isRefreshing)
+
+                    if !refreshError.isEmpty {
+                        Text(refreshError)
+                            .font(.caption)
+                            .foregroundStyle(.red)
+                            .multilineTextAlignment(.center)
+                    }
+                }
+                .padding(24)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+
             } else if store.onboardingStage == .accessDeclined {
                 Text("Your resident application was declined.")
+
             } else if store.onboardingStage == .active {
                 MainTabView()
             }
 
-            // If the app is locked show the lock screen on top
-            // of everything else
+            // Keep the existing app lock functionality
             if store.isLocked {
                 AppLockView()
             }
         }
-        // Watch for the app going to background
         .onChange(of: scenePhase) { oldPhase, newPhase in
             if newPhase == .background {
-                // Lock the app when it goes to background
                 store.lockApp()
             }
         }
