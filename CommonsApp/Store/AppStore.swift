@@ -123,10 +123,34 @@ final class AppStore: ObservableObject {
             "createdAt": FieldValue.serverTimestamp()
         ]
 
-        try await Firestore.firestore()
+        let profileReference = Firestore.firestore()
             .collection("users")
             .document(user.uid)
-            .setData(profileData)
+
+        try await Firestore.firestore().runTransaction { transaction, errorPointer in
+            do {
+                let existingProfile = try transaction.getDocument(profileReference)
+
+                if existingProfile.exists {
+                    errorPointer?.pointee = NSError(
+                        domain: "CommonsApp",
+                        code: 409,
+                        userInfo: [
+                            NSLocalizedDescriptionKey:
+                                "Your resident profile already exists. Please sign in instead."
+                        ]
+                    )
+                    return nil
+                }
+
+                transaction.setData(profileData, forDocument: profileReference)
+                return nil
+
+            } catch {
+                errorPointer?.pointee = error as NSError
+                return nil
+            }
+        }
 
         currentResident = Resident(
             name: name,

@@ -13,6 +13,8 @@ struct ProfileSetupView: View {
     @State private var name = "Alex Morgan"
     @State private var unit = "7B"
     @State private var phone = "+94 77 123 4567"
+    @State private var isSaving = false
+    @State private var saveError: String?
 
     var body: some View {
         ZStack {
@@ -61,14 +63,27 @@ struct ProfileSetupView: View {
                 }
                 .scrollIndicators(.hidden)
 
-                Button("Finish setup") {
-                    store.completeProfileSetup(
-                        name: name,
-                        unit: unit,
-                        phone: phone,
-                        preference: .push,
-                        showUnit: true
-                    )
+                Button(isSaving ? "Saving..." : "Finish setup") {
+                    guard !isSaving else { return }
+
+                    isSaving = true
+                    saveError = nil
+
+                    Task { @MainActor in
+                        defer { isSaving = false }
+
+                        do {
+                            try await store.saveResidentProfile(
+                                name: name,
+                                unit: unit,
+                                phone: phone,
+                                preference: .push,
+                                showUnit: true
+                            )
+                        } catch {
+                            saveError = error.localizedDescription
+                        }
+                    }
                 }
                 .font(.system(size: 13, weight: .bold))
                 .foregroundStyle(.white)
@@ -76,10 +91,32 @@ struct ProfileSetupView: View {
                 .frame(height: 52)
                 .background(Color(hex: "7061CF"))
                 .clipShape(Capsule())
-                .disabled(name.isEmpty || unit.isEmpty)
-                .opacity(name.isEmpty || unit.isEmpty ? 0.5 : 1)
+                .disabled(
+                    isSaving ||
+                    name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
+                    unit.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                )
+                .opacity(
+                    isSaving ||
+                    name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
+                    unit.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                        ? 0.5 : 1
+                )
                 .padding(.horizontal, 20)
                 .padding(.bottom, 56)
+                .alert(
+                    "Unable to save profile",
+                    isPresented: Binding(
+                        get: { saveError != nil },
+                        set: { if !$0 { saveError = nil } }
+                    )
+                ) {
+                    Button("OK", role: .cancel) {
+                        saveError = nil
+                    }
+                } message: {
+                    Text(saveError ?? "")
+                }
             }
         }
     }
