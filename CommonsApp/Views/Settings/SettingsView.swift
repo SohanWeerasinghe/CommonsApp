@@ -10,6 +10,8 @@ import SwiftUI
 struct SettingsView: View {
 
     @EnvironmentObject var store: AppStore
+    @State private var showSignOutError = false
+    @State private var signOutErrorMessage = ""
 
     var body: some View {
         ZStack {
@@ -207,11 +209,49 @@ struct SettingsView: View {
                         }
                     }
                 }
+                //Account section
+                VStack(alignment: .leading, spacing: 12) {
+
+                    SectionHeader(title: "Account")
+
+                    PlaqueCard {
+                        Button {
+                            do {
+                                try store.signOutResident()
+                            } catch {
+                                signOutErrorMessage = error.localizedDescription
+                                showSignOutError = true
+                            }
+                        } label: {
+                            HStack(spacing: 14) {
+                                Image(systemName: "rectangle.portrait.and.arrow.right")
+                                    .font(.system(size: 20))
+                                    .foregroundStyle(.red)
+                                    .frame(width: 32)
+
+                                Text("Sign Out")
+                                    .font(Theme.ui(14, weight: .semibold))
+                                    .foregroundStyle(.red)
+
+                                Spacer()
+
+                                Image(systemName: "chevron.right")
+                                    .foregroundStyle(Theme.textMuted)
+                            }
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
                 .padding(16)
             }
         }
         .navigationTitle("Settings")
         .navigationBarTitleDisplayMode(.large)
+        .alert("Sign Out Failed", isPresented: $showSignOutError) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text(signOutErrorMessage)
+        }
     }
 }
 

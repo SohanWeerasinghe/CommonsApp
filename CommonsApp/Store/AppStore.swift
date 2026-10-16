@@ -76,6 +76,15 @@ final class AppStore: ObservableObject {
         try await loadResidentAccountStatus()
         return true
     }
+    //prevent from loading the app when sign out
+    @MainActor
+    func signOutResident() throws {
+        try Auth.auth().signOut()
+
+        pendingEmail = ""
+        currentResident = Resident(name: "", unit: "")
+        onboardingStage = .signIn
+    }
     
     @MainActor
     func restoreSession() async {

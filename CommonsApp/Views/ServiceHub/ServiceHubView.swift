@@ -345,54 +345,24 @@ private struct AmenitiesListView: View {
         }
     }
 }
+
 private struct SimpleSettingsView: View {
 
-    @Environment(\.dismiss) var dismiss
+    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-
         NavigationStack {
-
-            ZStack {
-
-                Color(
-                    red: 0.97,
-                    green: 0.97,
-                    blue: 0.96
-                )
-                .ignoresSafeArea()
-
-                VStack {
-
-                    Text("Service settings")
-                        .font(.system(size: 20, weight: .bold))
-
-                    Text("Settings can be managed here.")
-                        .font(.system(size: 14))
-                        .foregroundStyle(.gray)
-                        .padding(.top, 8)
-
-                    Spacer()
-                }
-                .padding(20)
-            }
-            .navigationTitle("Settings")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-
-                ToolbarItem(
-                    placement: .topBarLeading
-                ) {
-
-                    Button("Close") {
-                        dismiss()
+            SettingsView()
+                .toolbar {
+                    ToolbarItem(placement: .topBarLeading) {
+                        Button("Close") {
+                            dismiss()
+                        }
                     }
                 }
-            }
         }
     }
 }
-
 
 private struct SimpleContactsView: View {
 
