@@ -19,6 +19,8 @@ struct AdminPanelView: View {
     @State private var isLoadingResidents = false
     @State private var residentsError = ""
     @State private var processingResidentID: String? = nil
+    @State private var isSavingAnnouncement = false
+    @State private var announcementError = ""
     
     var body: some View {
         ZStack {
@@ -177,12 +179,33 @@ struct AdminPanelView: View {
                                     )
                                 
                                 // Pin button
-                                Button("Pin to Building Wall") {
+                                Button {
                                     pinAnnouncement()
+                                } label: {
+                                    HStack(spacing: 8) {
+                                        if isSavingAnnouncement {
+                                            ProgressView()
+                                        }
+
+                                        Text(isSavingAnnouncement ? "Saving..." : "Pin to Building Wall")
+                                    }
                                 }
                                 .buttonStyle(PrimaryButtonStyle())
-                                .disabled(announcementText.isEmpty)
-                                .opacity(announcementText.isEmpty ? 0.5 : 1)
+                                .disabled(
+                                    isSavingAnnouncement ||
+                                    announcementText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                                )
+                                .opacity(
+                                    isSavingAnnouncement ||
+                                    announcementText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                                    ? 0.5 : 1
+                                )
+
+                                if !announcementError.isEmpty {
+                                    Text(announcementError)
+                                        .font(Theme.ui(12))
+                                        .foregroundStyle(.red)
+                                }
                                 
                                 // Success confirmation
                                 if didPin {
@@ -256,9 +279,34 @@ struct AdminPanelView: View {
     
     // Pins the announcement to the building wall
     func pinAnnouncement() {
-        store.pinAnnouncement(announcementText)
-        didPin = true
-        announcementText = ""
+        let text = announcementText.trimmingCharacters(
+            in: .whitespacesAndNewlines
+        )
+
+        guard !text.isEmpty, !isSavingAnnouncement else { return }
+
+        isSavingAnnouncement = true
+        announcementError = ""
+        didPin = false
+
+        Task {
+            defer {
+                isSavingAnnouncement = false
+            }
+
+            do {
+                try await store.saveAnnouncementToFirestore(text)
+
+                // Preserve the existing Building Wall and widget behavior.
+                store.pinAnnouncement(text)
+
+                didPin = true
+                announcementText = ""
+
+            } catch {
+                announcementError = error.localizedDescription
+            }
+        }
     }
     
     // Small stat box showing a number and a label

@@ -9,6 +9,7 @@ import SwiftUI
 
 struct BuildingWallView: View {
 
+    @EnvironmentObject var store: AppStore
     @State private var showNewPost = false
 
     var body: some View {
@@ -25,7 +26,27 @@ struct BuildingWallView: View {
                     BuildingWallHeader()
 
                     RooftopEventCard()
-                        .padding(.top, 19)
+                    if !store.pinnedAnnouncementText.isEmpty {
+                        VStack(alignment: .leading, spacing: 10) {
+                            Label("PINNED ANNOUNCEMENT", systemImage: "pin.fill")
+                                .font(.system(size: 11, weight: .bold))
+                                .foregroundStyle(Color(hex: "6759BD"))
+
+                            Text(store.pinnedAnnouncementText)
+                                .font(.system(size: 14))
+                                .foregroundStyle(Color(hex: "172034"))
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        .padding(16)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(.white.opacity(0.82))
+                        .clipShape(RoundedRectangle(cornerRadius: 20))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 20)
+                                .stroke(Color(hex: "E0E3E8"), lineWidth: 1)
+                        }
+                        .padding(.top, 15)
+                    }
 
                     LatestPostSection {
                         showNewPost = true
@@ -48,6 +69,12 @@ struct BuildingWallView: View {
         .toolbar(.hidden, for: .navigationBar)
         .sheet(isPresented: $showNewPost) {
             NewPostView()
+        }
+        .onAppear {
+            store.startAnnouncementListener()
+        }
+        .onDisappear {
+            store.stopAnnouncementListener()
         }
     }
 }

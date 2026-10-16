@@ -38,6 +38,7 @@ final class AppStore: ObservableObject {
     //Admin
     @Published var pendingResidents: [PendingResident] = []
     @Published var pinnedAnnouncementText: String = ""
+    private var announcementListener: ListenerRegistration?
     
     //Settings
     @Published var offlineCache: [OfflineCacheItem] = []
@@ -76,16 +77,25 @@ final class AppStore: ObservableObject {
         try await loadResidentAccountStatus()
         return true
     }
-    //prevent from loading the app when sign out
+    // Prevent the app from loading resident data after sign-out.
     @MainActor
     func signOutResident() throws {
         try Auth.auth().signOut()
 
+        // Stop listening for announcements from the previous session.
+        stopAnnouncementListener()
+
+        // Clear the previous resident's announcement data.
+        pinnedAnnouncementText = ""
+        posts.removeAll { $0.isPinned }
+
         pendingEmail = ""
         currentResident = Resident(name: "", unit: "")
         onboardingStage = .signIn
+
+        // Refresh the widget after clearing the announcement.
+        saveDataForWidget()
     }
-    
     @MainActor
     func restoreSession() async {
         guard Auth.auth().currentUser != nil else {
@@ -653,6 +663,141 @@ final class AppStore: ObservableObject {
 
         // Save for widget
         saveDataForWidget()
+    }
+
+    func saveAnnouncementToFirestore(_ text: String) async throws {
+        guard let user = Auth.auth().currentUser else {
+            throw NSError(
+                domain: "CommonsApp",
+                code: 401,
+                userInfo: [
+                    NSLocalizedDescriptionKey: "You must be signed in."
+                ]
+            )
+        }
+
+        let token = try await user.getIDTokenResult()
+
+        guard token.claims["admin"] as? Bool == true else {
+            throw NSError(
+                domain: "CommonsApp",
+                code: 403,
+                userInfo: [
+                    NSLocalizedDescriptionKey: "Only administrators can post announcements."
+                ]
+            )
+        }
+
+        let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard !trimmedText.isEmpty else {
+            throw NSError(
+                domain: "CommonsApp",
+                code: 400,
+                userInfo: [
+                    NSLocalizedDescriptionKey: "Announcement cannot be empty."
+                ]
+            )
+        }
+
+        try await Firestore.firestore()
+            .collection("announcements")
+            .addDocument(data: [
+                "text": trimmedText,
+                "createdAt": FieldValue.serverTimestamp(),
+                "createdBy": user.uid,
+                "isPinned": true
+            ])
+    }
+
+    func loadLatestAnnouncement() async throws {
+        guard Auth.auth().currentUser != nil else {
+            return
+        }
+
+        let snapshot = try await Firestore.firestore()
+            .collection("announcements")
+            .order(by: "createdAt", descending: true)
+            .limit(to: 1)
+            .getDocuments()
+
+        guard let document = snapshot.documents.first,
+              let text = document.data()["text"] as? String,
+              !text.isEmpty else {
+            return
+        }
+
+        pinnedAnnouncementText = text
+
+        // Update the existing Building Wall post collection.
+        let announcementPost = Post(
+            authorName: "Management",
+            authorUnit: "—",
+            timestamp: (document.data()["createdAt"] as? Timestamp)?.dateValue()
+                ?? Date(),
+            category: .announcement,
+            text: text,
+            isPinned: true
+        )
+
+        posts.removeAll { $0.isPinned }
+        posts.insert(announcementPost, at: 0)
+
+        // Preserve widget updates.
+        saveDataForWidget()
+    }
+
+    //newest Firestore announcement and updates the Building Wall automatically
+    func startAnnouncementListener() {
+        // Prevent duplicate listeners.
+        guard announcementListener == nil else { return }
+
+        guard Auth.auth().currentUser != nil else { return }
+
+        announcementListener = Firestore.firestore()
+            .collection("announcements")
+            .order(by: "createdAt", descending: true)
+            .limit(to: 1)
+            .addSnapshotListener { [weak self] snapshot, error in
+
+                if let error = error {
+                    print("Announcement listener error: \(error.localizedDescription)")
+                    return
+                }
+
+                guard let document = snapshot?.documents.first,
+                      let text = document.data()["text"] as? String else {
+                    return
+                }
+
+                let timestamp = (document.data()["createdAt"] as? Timestamp)?
+                    .dateValue() ?? Date()
+
+                Task { @MainActor in
+                    guard let self = self else { return }
+
+                    self.pinnedAnnouncementText = text
+
+                    let announcementPost = Post(
+                        authorName: "Management",
+                        authorUnit: "—",
+                        timestamp: timestamp,
+                        category: .announcement,
+                        text: text,
+                        isPinned: true
+                    )
+
+                    self.posts.removeAll { $0.isPinned }
+                    self.posts.insert(announcementPost, at: 0)
+
+                    self.saveDataForWidget()
+                }
+            }
+    }
+
+    func stopAnnouncementListener() {
+        announcementListener?.remove()
+        announcementListener = nil
     }
 }
 
