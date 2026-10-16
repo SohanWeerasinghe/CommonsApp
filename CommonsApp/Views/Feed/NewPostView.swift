@@ -17,6 +17,10 @@ struct NewPostView: View {
     @State private var text = ""
     @State private var category: Post.Category = .news
     @State private var hasPhoto = false
+    @State private var showAuthorName = true
+    @State private var showAuthorUnit = false
+    @State private var isSaving = false
+    @State private var postError = ""
 
     var body: some View {
         NavigationStack {
@@ -63,6 +67,7 @@ struct NewPostView: View {
                                 .foregroundStyle(Theme.textMuted)
 
                             TextEditor(text: $text)
+                                .foregroundColor(.gray)
                                 .frame(height: 160)
                                 .padding(8)
                                 .scrollContentBackground(.hidden)
@@ -72,6 +77,55 @@ struct NewPostView: View {
                                     RoundedRectangle(cornerRadius: 10)
                                         .stroke(Theme.hairline, lineWidth: 1)
                                 )
+                        }
+                        // Post privacy settings
+                        VStack(alignment: .leading, spacing: 12) {
+
+                            Text("POST PRIVACY")
+                                .font(Theme.ui(12, weight: .semibold))
+                                .foregroundStyle(Theme.textMuted)
+
+                            Toggle(isOn: $showAuthorName) {
+                                    Label("Show my name", systemImage: "person.crop.circle")
+                                        .foregroundColor(.black)
+                                        .font(.system(size: 15, weight: .medium))
+                                        .foregroundStyle(.primary)
+                                }
+                                .tint(.purple)
+
+                                Divider()
+
+                                Toggle(isOn: $showAuthorUnit) {
+                                    Label("Show my apartment/unit", systemImage: "house")
+                                        .foregroundColor(.black)
+                                        .font(.system(size: 15, weight: .medium))
+                                        .foregroundStyle(.primary)
+                                }
+                                .tint(.purple)
+                                .disabled(
+                                    !showAuthorName ||
+                                    !store.currentResident.showUnitToNeighbors
+                                )
+
+                            if !showAuthorName {
+                                Text("Your post will appear as Anonymous User.")
+                                    .font(Theme.ui(12))
+                                    .foregroundStyle(Theme.textMuted)
+                            }
+
+                            if !store.currentResident.showUnitToNeighbors {
+                                Text("Your profile privacy setting hides your apartment/unit.")
+                                    .font(Theme.ui(12))
+                                    .foregroundStyle(Theme.textMuted)
+                            }
+                        }
+                        .tint(Theme.sage)
+                        .padding(14)
+                        .background(Theme.card)
+                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 10)
+                                .stroke(Theme.hairline, lineWidth: 1)
                         }
 
                         // Photo toggle button
@@ -111,20 +165,64 @@ struct NewPostView: View {
                     Button("Cancel") {
                         dismiss()
                     }
+                    .alert(
+                        "Unable to Publish Post",
+                        isPresented: Binding(
+                            get: { !postError.isEmpty },
+                            set: { if !$0 { postError = "" } }
+                        )
+                    ) {
+                        Button("OK", role: .cancel) {
+                            postError = ""
+                        }
+                    } message: {
+                        Text(postError)
+                    }
                 }
 
                 // Post button — top right
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Post") {
-                        store.addPost(
-                            text: text,
-                            category: category,
-                            hasPhoto: hasPhoto
-                        )
-                        dismiss()
+                    Button {
+                        guard !isSaving else { return }
+
+                        isSaving = true
+                        postError = ""
+
+                        Task {
+                            do {
+                                try await store.saveResidentPostToFirestore(
+                                    text: text,
+                                    category: category,
+                                    showAuthorName: showAuthorName,
+                                    showAuthorUnit: showAuthorUnit
+                                )
+
+                                store.addPost(
+                                    text: text,
+                                    category: category,
+                                    hasPhoto: false
+                                )
+
+                                isSaving = false
+                                dismiss()
+                            } catch {
+                                postError = error.localizedDescription
+                                isSaving = false
+                            }
+                        }
+                    } label: {
+                        if isSaving {
+                            ProgressView()
+                        } else {
+                            Text("Post")
+                        }
                     }
-                    // Only active when something is typed
-                    .disabled(text.isEmpty)
+                    .disabled(
+                        text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                        || text.count > 2000
+                        || category == .announcement
+                        || isSaving
+                    )
                 }
             }
         }

@@ -39,6 +39,7 @@ final class AppStore: ObservableObject {
     @Published var pendingResidents: [PendingResident] = []
     @Published var pinnedAnnouncementText: String = ""
     private var announcementListener: ListenerRegistration?
+    private var residentPostsListener: ListenerRegistration?
     
     //Settings
     @Published var offlineCache: [OfflineCacheItem] = []
@@ -82,12 +83,13 @@ final class AppStore: ObservableObject {
     func signOutResident() throws {
         try Auth.auth().signOut()
 
-        // Stop listening for announcements from the previous session.
+        // Stop both Firestore listeners.
         stopAnnouncementListener()
+        stopResidentPostsListener()
 
-        // Clear the previous resident's announcement data.
+        // Clear data from the previous resident's session.
         pinnedAnnouncementText = ""
-        posts.removeAll { $0.isPinned }
+        posts.removeAll()
 
         pendingEmail = ""
         currentResident = Resident(name: "", unit: "")
@@ -339,6 +341,156 @@ final class AppStore: ObservableObject {
         posts.insert(post, at: 0)
     }
     
+    func saveResidentPostToFirestore(
+        text: String,
+        category: Post.Category,
+        showAuthorName: Bool,
+        showAuthorUnit: Bool
+    ) async throws {
+
+        guard let user = Auth.auth().currentUser else {
+            throw NSError(
+                domain: "CommonsApp",
+                code: 401,
+                userInfo: [
+                    NSLocalizedDescriptionKey: "You must be signed in."
+                ]
+            )
+        }
+
+        guard category == .news || category == .askForHelp else {
+            throw NSError(
+                domain: "CommonsApp",
+                code: 403,
+                userInfo: [
+                    NSLocalizedDescriptionKey:
+                        "Residents cannot publish announcements."
+                ]
+            )
+        }
+
+        let trimmedText = text.trimmingCharacters(
+            in: .whitespacesAndNewlines
+        )
+
+        guard !trimmedText.isEmpty && trimmedText.count <= 2000 else {
+            throw NSError(
+                domain: "CommonsApp",
+                code: 400,
+                userInfo: [
+                    NSLocalizedDescriptionKey:
+                        "Post must contain between 1 and 2000 characters."
+                ]
+            )
+        }
+
+        let profile = try await Firestore.firestore()
+            .collection("users")
+            .document(user.uid)
+            .getDocument(source: .server)
+
+        guard let profileData = profile.data(),
+              profileData["approvalStatus"] as? String == "approved" else {
+            throw NSError(
+                domain: "CommonsApp",
+                code: 403,
+                userInfo: [
+                    NSLocalizedDescriptionKey: "Approved resident profile required."
+                ]
+            )
+        }
+
+        let name = profileData["name"] as? String ?? ""
+        let unit = profileData["unit"] as? String ?? ""
+        let unitAllowed = profileData["showUnitToNeighbors"] as? Bool == true
+
+        let visibleName = showAuthorName ? name : ""
+        let visibleUnit = showAuthorName && showAuthorUnit && unitAllowed
+            ? unit
+            : ""
+
+        try await Firestore.firestore()
+            .collection("posts")
+            .addDocument(data: [
+                "text": trimmedText,
+                "category": category.rawValue,
+                "createdAt": FieldValue.serverTimestamp(),
+                "createdBy": user.uid,
+                "showAuthorName": showAuthorName,
+                "showAuthorUnit": !visibleUnit.isEmpty,
+                "authorName": visibleName,
+                "authorUnit": visibleUnit
+            ])
+    }
+
+    func startResidentPostsListener() {
+        guard residentPostsListener == nil else { return }
+        guard Auth.auth().currentUser != nil else { return }
+
+        residentPostsListener = Firestore.firestore()
+            .collection("posts")
+            .order(by: "createdAt", descending: true)
+            .limit(to: 50)
+            .addSnapshotListener { [weak self] snapshot, error in
+
+                if let error = error {
+                    print("Resident posts listener error: \(error.localizedDescription)")
+                    return
+                }
+
+                guard let documents = snapshot?.documents else { return }
+
+                Task { @MainActor in
+                    guard let self = self else { return }
+
+                    let residentPosts: [Post] = documents.compactMap { document in
+                        let data = document.data()
+
+                        guard let text = data["text"] as? String,
+                              let categoryString = data["category"] as? String,
+                              let category = Post.Category(rawValue: categoryString)
+                        else {
+                            return nil
+                        }
+
+                        let timestamp = (data["createdAt"] as? Timestamp)?
+                            .dateValue() ?? Date()
+
+                        let showName = data["showAuthorName"] as? Bool == true
+                        let showUnit = data["showAuthorUnit"] as? Bool == true
+
+                        let savedName = data["authorName"] as? String ?? ""
+                        let savedUnit = data["authorUnit"] as? String ?? ""
+
+                        let displayName = showName && !savedName.isEmpty
+                            ? savedName
+                            : "Anonymous User"
+
+                        let displayUnit = showName && showUnit
+                            ? savedUnit
+                            : ""
+
+                        return Post(
+                            authorName: displayName,
+                            authorUnit: displayUnit,
+                            timestamp: timestamp,
+                            category: category,
+                            text: text
+                        )
+                    }
+
+                    // Keep administrator announcements separate.
+                    self.posts.removeAll { !$0.isPinned }
+                    self.posts.append(contentsOf: residentPosts)
+                }
+            }
+    }
+
+    func stopResidentPostsListener() {
+        residentPostsListener?.remove()
+        residentPostsListener = nil
+    }
+
     func toggleLike(_ post: Post) {
         // Find the matching post and add 1 like
         for index in 0..<posts.count {
