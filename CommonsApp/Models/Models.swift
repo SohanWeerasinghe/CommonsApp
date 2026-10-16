@@ -33,6 +33,7 @@ enum OnboardingStage {
     case pendingApproval
     case accessDeclined
     case active
+    case loading
 }
 
 //Post in the building wall

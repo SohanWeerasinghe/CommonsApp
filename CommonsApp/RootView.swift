@@ -10,6 +10,17 @@ struct RootView: View {
     var body: some View {
         ZStack {
             // Show the right screen based on onboarding stage
+            if store.onboardingStage == .loading {
+                VStack(spacing: 16) {
+                    ProgressView()
+                    Text("Checking your account...")
+                        .font(.system(size: 14))
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if store.onboardingStage == .signIn {
+                SignInView()
+            }
             if store.onboardingStage == .signIn {
                 SignInView()
             } else if store.onboardingStage == .profileSetup {
@@ -36,6 +47,9 @@ struct RootView: View {
                 // Lock the app when it goes to background
                 store.lockApp()
             }
+        }
+        .task {
+            await store.restoreSession()
         }
     }
 }

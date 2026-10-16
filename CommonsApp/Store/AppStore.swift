@@ -14,7 +14,7 @@ import FirebaseFirestore
 
 final class AppStore: ObservableObject {
     //Onboarding
-    @Published var onboardingStage: OnboardingStage = .signIn
+    @Published var onboardingStage: OnboardingStage = .loading
     @Published var pendingEmail: String = ""
     @Published var currentResident = Resident(name: "", unit: "")
     
@@ -75,6 +75,21 @@ final class AppStore: ObservableObject {
 
         try await loadResidentAccountStatus()
         return true
+    }
+    
+    @MainActor
+    func restoreSession() async {
+        guard Auth.auth().currentUser != nil else {
+            onboardingStage = .signIn
+            return
+        }
+
+        do {
+            try await loadResidentAccountStatus()
+        } catch {
+            print("Session restoration failed: \(error.localizedDescription)")
+            onboardingStage = .signIn
+        }
     }
     
     //checks the signed-in resident's Firestore profile and routes them correctly
