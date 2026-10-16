@@ -88,7 +88,42 @@ struct RootView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
 
             } else if store.onboardingStage == .accessDeclined {
-                Text("Your resident application was declined.")
+                VStack(spacing: 20) {
+
+                    Image(systemName: "person.crop.circle.badge.xmark")
+                        .font(.system(size: 48))
+                        .foregroundStyle(.red)
+
+                    Text("Application Declined")
+                        .font(.title3.bold())
+
+                    Text("Your resident application was not approved. Please contact your building administrator for assistance.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+
+                    Button {
+                        do {
+                            try store.signOutResident()
+                        } catch {
+                            refreshError = error.localizedDescription
+                        }
+                    } label: {
+                        Text("Sign Out")
+                            .frame(maxWidth: .infinity)
+                            .padding(14)
+                    }
+                    .buttonStyle(.borderedProminent)
+
+                    if !refreshError.isEmpty {
+                        Text(refreshError)
+                            .font(.caption)
+                            .foregroundStyle(.red)
+                            .multilineTextAlignment(.center)
+                    }
+                }
+                .padding(24)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
 
             } else if store.onboardingStage == .active {
                 MainTabView()
