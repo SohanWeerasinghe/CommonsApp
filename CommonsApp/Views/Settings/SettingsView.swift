@@ -121,57 +121,6 @@ struct SettingsView: View {
                     // MARK: Demo section
                     VStack(alignment: .leading, spacing: 12) {
 
-                        SectionHeader(title: "Demo Controls")
-
-                        // Manager mode toggle
-                        PlaqueCard {
-                            HStack {
-                                VStack(alignment: .leading, spacing: 3) {
-                                    Text("Manager Mode")
-                                        .font(Theme.ui(14, weight: .semibold))
-                                        .foregroundStyle(Theme.textPrimary)
-
-                                    Text("Show the admin panel tab")
-                                        .font(Theme.ui(11.5))
-                                        .foregroundStyle(Theme.textMuted)
-                                }
-
-                                Spacer()
-
-                                Toggle("", isOn: $store.isManagerMode)
-                                    .labelsHidden()
-                                    .tint(Theme.brass)
-                            }
-                        }
-
-                        // Admin panel link — only shown in manager mode
-                        if store.isManagerMode {
-                            NavigationLink {
-                                AdminPanelView()
-                            } label: {
-                                HStack {
-                                    Image(systemName: "person.badge.shield.checkmark")
-                                        .foregroundStyle(Theme.brass)
-
-                                    Text("Open Admin Panel")
-                                        .font(Theme.ui(14, weight: .semibold))
-                                        .foregroundStyle(Theme.textPrimary)
-
-                                    Spacer()
-
-                                    Image(systemName: "chevron.right")
-                                        .foregroundStyle(Theme.textMuted)
-                                }
-                                .padding(16)
-                                .background(Theme.card)
-                                .clipShape(RoundedRectangle(cornerRadius: Theme.cardRadius))
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: Theme.cardRadius)
-                                        .stroke(Theme.hairline, lineWidth: 1)
-                                )
-                            }
-                        }
-                        
                         //My Profile section
                         VStack(alignment: .leading, spacing: 12) {
 
