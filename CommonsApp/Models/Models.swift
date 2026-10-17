@@ -67,6 +67,7 @@ struct SharedItem: Identifiable, Codable, Equatable {
     var ownerName: String
     var ownerUnit: String
     var status: Status
+    var ownerUID: String? = nil
 
     enum Status: String, Codable {
         case lending = "Lending"
@@ -123,22 +124,30 @@ struct BookingSlot: Identifiable, Codable, Equatable {
 //Chat Structure
 
 struct ChatMessage: Identifiable, Codable, Equatable {
-    var id        = UUID()
+    var id = UUID()
     var text: String
     var isMine: Bool
     var timestamp: Date
+
+    // Firestore message document identifier
+    var firestoreId: String? = nil
 }
 
 struct ChatThread: Identifiable, Codable, Equatable {
-    var id            = UUID()
+    var id = UUID()
     var neighborName: String
     var neighborUnit: String
     var contextNote: String?
     var messages: [ChatMessage]
 
+    // Firestore conversation document identifier
+    var firestoreId: String? = nil
+
+    // Firebase UID of the other participant
+    var neighborUID: String? = nil
+
     var lastMessage: ChatMessage? { messages.last }
 }
-
 //Admin Structure
 
 struct PendingResident: Identifiable, Codable, Equatable {
