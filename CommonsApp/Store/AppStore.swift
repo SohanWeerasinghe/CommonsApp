@@ -39,6 +39,10 @@ final class AppStore: ObservableObject {
     @Published var pendingResidents: [PendingResident] = []
     @Published var pinnedAnnouncementText: String = ""
     private var announcementListener: ListenerRegistration?
+    private var residentPostsListener: ListenerRegistration?
+    private var chatDirectory: [String: (name: String, unit: String)] = [:]
+    private var chatThreadsListener: ListenerRegistration?
+    private var chatMessageListeners: [String: ListenerRegistration] = [:]
     
     //Settings
     @Published var offlineCache: [OfflineCacheItem] = []
@@ -82,12 +86,16 @@ final class AppStore: ObservableObject {
     func signOutResident() throws {
         try Auth.auth().signOut()
 
-        // Stop listening for announcements from the previous session.
+        // Stop Firestore listeners.
         stopAnnouncementListener()
+        stopResidentPostsListener()
+        stopChatListeners()
+        chatDirectory.removeAll()
 
-        // Clear the previous resident's announcement data.
+        // Clear data from the previous resident's session.
         pinnedAnnouncementText = ""
-        posts.removeAll { $0.isPinned }
+        posts.removeAll()
+        chatThreads.removeAll()
 
         pendingEmail = ""
         currentResident = Resident(name: "", unit: "")
@@ -339,6 +347,327 @@ final class AppStore: ObservableObject {
         posts.insert(post, at: 0)
     }
     
+    func saveResidentPostToFirestore(
+        text: String,
+        category: Post.Category,
+        showAuthorName: Bool,
+        showAuthorUnit: Bool
+    ) async throws {
+
+        guard let user = Auth.auth().currentUser else {
+            throw NSError(
+                domain: "CommonsApp",
+                code: 401,
+                userInfo: [
+                    NSLocalizedDescriptionKey: "You must be signed in."
+                ]
+            )
+        }
+
+        guard category == .news || category == .askForHelp else {
+            throw NSError(
+                domain: "CommonsApp",
+                code: 403,
+                userInfo: [
+                    NSLocalizedDescriptionKey:
+                        "Residents cannot publish announcements."
+                ]
+            )
+        }
+
+        let trimmedText = text.trimmingCharacters(
+            in: .whitespacesAndNewlines
+        )
+
+        guard !trimmedText.isEmpty && trimmedText.count <= 2000 else {
+            throw NSError(
+                domain: "CommonsApp",
+                code: 400,
+                userInfo: [
+                    NSLocalizedDescriptionKey:
+                        "Post must contain between 1 and 2000 characters."
+                ]
+            )
+        }
+
+        let profile = try await Firestore.firestore()
+            .collection("users")
+            .document(user.uid)
+            .getDocument(source: .server)
+
+        guard let profileData = profile.data(),
+              profileData["approvalStatus"] as? String == "approved" else {
+            throw NSError(
+                domain: "CommonsApp",
+                code: 403,
+                userInfo: [
+                    NSLocalizedDescriptionKey: "Approved resident profile required."
+                ]
+            )
+        }
+
+        let name = profileData["name"] as? String ?? ""
+        let unit = profileData["unit"] as? String ?? ""
+        let unitAllowed = profileData["showUnitToNeighbors"] as? Bool == true
+
+        let visibleName = showAuthorName ? name : ""
+        let visibleUnit = showAuthorName && showAuthorUnit && unitAllowed
+            ? unit
+            : ""
+
+        try await Firestore.firestore()
+            .collection("posts")
+            .addDocument(data: [
+                "text": trimmedText,
+                "category": category.rawValue,
+                "createdAt": FieldValue.serverTimestamp(),
+                "createdBy": user.uid,
+                "showAuthorName": showAuthorName,
+                "showAuthorUnit": !visibleUnit.isEmpty,
+                "authorName": visibleName,
+                "authorUnit": visibleUnit
+            ])
+    }
+
+    func startResidentPostsListener() {
+        guard residentPostsListener == nil else { return }
+        guard Auth.auth().currentUser != nil else { return }
+
+        residentPostsListener = Firestore.firestore()
+            .collection("posts")
+            .order(by: "createdAt", descending: true)
+            .limit(to: 50)
+            .addSnapshotListener { [weak self] snapshot, error in
+
+                if let error = error {
+                    print("Resident posts listener error: \(error.localizedDescription)")
+                    return
+                }
+
+                guard let documents = snapshot?.documents else { return }
+
+                Task { @MainActor in
+                    guard let self = self else { return }
+
+                    let residentPosts: [Post] = documents.compactMap { document in
+                        let data = document.data()
+
+                        guard let text = data["text"] as? String,
+                              let categoryString = data["category"] as? String,
+                              let category = Post.Category(rawValue: categoryString)
+                        else {
+                            return nil
+                        }
+
+                        let timestamp = (data["createdAt"] as? Timestamp)?
+                            .dateValue() ?? Date()
+
+                        let showName = data["showAuthorName"] as? Bool == true
+                        let showUnit = data["showAuthorUnit"] as? Bool == true
+
+                        let savedName = data["authorName"] as? String ?? ""
+                        let savedUnit = data["authorUnit"] as? String ?? ""
+
+                        let displayName = showName && !savedName.isEmpty
+                            ? savedName
+                            : "Anonymous User"
+
+                        let displayUnit = showName && showUnit
+                            ? savedUnit
+                            : ""
+
+                        return Post(
+                            authorName: displayName,
+                            authorUnit: displayUnit,
+                            timestamp: timestamp,
+                            category: category,
+                            text: text
+                        )
+                    }
+
+                    // Keep administrator announcements separate.
+                    self.posts.removeAll { !$0.isPinned }
+                    self.posts.append(contentsOf: residentPosts)
+                }
+            }
+    }
+
+    func stopResidentPostsListener() {
+        residentPostsListener?.remove()
+        residentPostsListener = nil
+    }
+
+    func stopChatListeners() {
+        chatThreadsListener?.remove()
+        chatThreadsListener = nil
+
+        for listener in chatMessageListeners.values {
+            listener.remove()
+        }
+
+        chatMessageListeners.removeAll()
+    }
+
+    @MainActor
+    func startChatThreadsListener() {
+        guard chatThreadsListener == nil else { return }
+        guard onboardingStage == .active else { return }
+        guard let uid = Auth.auth().currentUser?.uid else { return }
+
+        chatThreadsListener = Firestore.firestore()
+            .collection("chats")
+            .whereField("participantIds", arrayContains: uid)
+            .addSnapshotListener { [weak self] snapshot, error in
+
+                if let error = error {
+                    print("Chat listener error: \(error.localizedDescription)")
+                    return
+                }
+
+                guard let documents = snapshot?.documents else { return }
+
+                Task { @MainActor [weak self] in
+                    guard let self = self else { return }
+                    guard Auth.auth().currentUser?.uid == uid else { return }
+                    guard self.onboardingStage == .active else { return }
+
+                    // Resolve only public, approved-resident directory fields.
+
+                    do {
+
+                        let directory = try await Firestore.firestore()
+
+                            .collection("residentDirectory").getDocuments()
+
+                        self.chatDirectory = Dictionary(uniqueKeysWithValues: directory.documents.compactMap { doc -> (String, (name: String, unit: String))? in
+
+                            guard let name = doc.data()["name"] as? String, !name.isEmpty else { return nil }
+
+                            return (doc.documentID, (name: name, unit: doc.data()["unit"] as? String ?? ""))
+
+                        })
+
+                    } catch {
+
+                        print("Directory lookup failed: \(error.localizedDescription)")
+
+                    }
+
+
+                    let threads: [ChatThread] = documents.compactMap { document in
+                        let data = document.data()
+
+                        guard let participants = data["participantIds"] as? [String],
+                              participants.count == 2,
+                              participants.contains(uid),
+                              let neighborUID = participants.first(where: { $0 != uid })
+                        else {
+                            return nil
+                        }
+
+                        // Names and units are not available in the current
+                        // chat schema. Do not expose private user profiles.
+                        let existing = self.chatThreads.first {
+                            $0.firestoreId == document.documentID
+                        }
+
+                        var thread = ChatThread(
+                            neighborName: self.chatDirectory[neighborUID]?.name ?? existing?.neighborName ?? "Resident",
+                            neighborUnit: self.chatDirectory[neighborUID]?.unit ?? existing?.neighborUnit ?? "",
+                            contextNote: existing?.contextNote,
+                            messages: existing?.messages ?? [],
+                            firestoreId: document.documentID,
+                            neighborUID: neighborUID
+                        )
+
+                        if let existing {
+                            thread.id = existing.id
+                        }
+
+                        return thread
+                    }
+
+                    self.chatThreads = threads
+                }
+            }
+    }
+
+    @MainActor
+    func startChatMessagesListener(chatId: String) {
+        guard chatMessageListeners[chatId] == nil else { return }
+        guard onboardingStage == .active else { return }
+        guard let uid = Auth.auth().currentUser?.uid else { return }
+
+        let listener = Firestore.firestore()
+            .collection("chats")
+            .document(chatId)
+            .collection("messages")
+            .order(by: "createdAt")
+            .addSnapshotListener { [weak self] snapshot, error in
+
+                if let error = error {
+                    print("Chat messages listener error: \(error.localizedDescription)")
+                    return
+                }
+
+                guard let documents = snapshot?.documents else { return }
+
+                Task { @MainActor [weak self] in
+                    guard let self = self else { return }
+                    guard Auth.auth().currentUser?.uid == uid else { return }
+                    guard self.onboardingStage == .active else { return }
+                    guard self.chatMessageListeners[chatId] != nil else { return }
+
+                    guard let threadIndex = self.chatThreads.firstIndex(where: {
+                        $0.firestoreId == chatId
+                    }) else {
+                        return
+                    }
+
+                    let existingMessages = self.chatThreads[threadIndex].messages
+
+                    let messages: [ChatMessage] = documents.compactMap { document in
+                        let data = document.data()
+
+                        guard let senderId = data["senderId"] as? String,
+                              let text = data["text"] as? String
+                        else {
+                            return nil
+                        }
+
+                        let timestamp = (data["createdAt"] as? Timestamp)?
+                            .dateValue() ?? Date()
+
+                        let existing = existingMessages.first {
+                            $0.firestoreId == document.documentID
+                        }
+
+                        var message = ChatMessage(
+                            text: text,
+                            isMine: senderId == uid,
+                            timestamp: timestamp,
+                            firestoreId: document.documentID
+                        )
+
+                        if let existing {
+                            message.id = existing.id
+                        }
+
+                        return message
+                    }
+
+                    self.chatThreads[threadIndex].messages = messages
+                }
+            }
+
+        chatMessageListeners[chatId] = listener
+    }
+
+    func stopChatMessagesListener(chatId: String) {
+        chatMessageListeners[chatId]?.remove()
+        chatMessageListeners.removeValue(forKey: chatId)
+    }
+
     func toggleLike(_ post: Post) {
         // Find the matching post and add 1 like
         for index in 0..<posts.count {
@@ -347,6 +676,51 @@ final class AppStore: ObservableObject {
                 break
             }
         }
+    }
+    
+    //Prevents creating a conversation with me
+    @MainActor
+    func createChat(with neighborUID: String) async throws -> String {
+        guard onboardingStage == .active,
+              let currentUID = Auth.auth().currentUser?.uid,
+              !neighborUID.isEmpty,
+              currentUID != neighborUID else {
+            throw NSError(
+                domain: "CommonsApp.Chat",
+                code: 1,
+                userInfo: [
+                    NSLocalizedDescriptionKey: "Invalid chat participants."
+                ]
+            )
+        }
+
+        let participants = [currentUID, neighborUID].sorted()
+
+        // Deterministic, collision-free ID for a pair of Firebase UIDs.
+        let chatId = participants
+            .map { "\($0.utf8.count)_\($0)" }
+            .joined(separator: "_")
+
+        let chatReference = Firestore.firestore()
+            .collection("chats")
+            .document(chatId)
+
+        // Check whether this conversation already exists.
+        do {
+            try await chatReference.setData([
+                "participantIds": participants,
+                "createdAt": FieldValue.serverTimestamp(),
+                "updatedAt": FieldValue.serverTimestamp()
+            ])
+        } catch {
+            // If the chat already exists, verify that it is accessible.
+            let existing = try await chatReference.getDocument()
+            guard existing.exists else {
+                throw error
+            }
+        }
+
+        return chatId
     }
     
     //Lend & Borrow
@@ -445,13 +819,29 @@ final class AppStore: ObservableObject {
     //Chat
     
     func send(text: String, in thread: ChatThread) {
-        for index in 0..<chatThreads.count {
-            if chatThreads[index].id == thread.id {
-                let newMessage = ChatMessage(text: text, isMine: true, timestamp: Date())
-                chatThreads[index].messages.append(newMessage)
-                break
-            }
+        let messageText = text.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard !messageText.isEmpty,
+              messageText.count <= 2000,
+              let chatId = thread.firestoreId,
+              let uid = Auth.auth().currentUser?.uid
+        else {
+            return
         }
+
+        Firestore.firestore()
+            .collection("chats")
+            .document(chatId)
+            .collection("messages")
+            .addDocument(data: [
+                "senderId": uid,
+                "text": messageText,
+                "createdAt": FieldValue.serverTimestamp()
+            ]) { error in
+                if let error = error {
+                    print("Failed to send chat message: \(error.localizedDescription)")
+                }
+            }
     }
     
     //Sample Data Setup
@@ -517,20 +907,6 @@ final class AppStore: ObservableObject {
         ]
         
         seedBookingSlots()
-        
-        //Create sample chat thread
-        chatThreads = [
-            ChatThread(
-                neighborName: "Marcus Webb",
-                neighborUnit: "6C",
-                contextNote: "You requested Power Drill from Marcus",
-                messages: [
-                    ChatMessage(text: "Hey! Happy to lend it over.", isMine: false, timestamp: now),
-                    ChatMessage(text: "Amazing, could I grab it this evening?", isMine: true, timestamp: now),
-                    ChatMessage(text: "Sure — I'm around after 6. Knock on 6C.", isMine: false, timestamp: now)
-                ]
-            )
-        ]
         
         //Create sample pending residents
         pendingResidents = [

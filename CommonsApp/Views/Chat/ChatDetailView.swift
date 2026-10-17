@@ -109,7 +109,19 @@ struct ChatDetailView: View {
                 }
             }
         }
+
+        //Turn on/off chat listner from firebase
         .toolbar(.hidden, for: .navigationBar)
+        .onAppear {
+            if let chatId = thread.firestoreId {
+                store.startChatMessagesListener(chatId: chatId)
+            }
+        }
+        .onDisappear {
+            if let chatId = thread.firestoreId {
+                store.stopChatMessagesListener(chatId: chatId)
+            }
+        }
     }
 
     func getCurrentThread() -> ChatThread {
@@ -233,7 +245,7 @@ private struct MessageBubble: View {
                         }
                     }
 
-                Text(message.timestamp.relativeDescription)
+                Text(message.timestamp.chatRelativeDescription)
                     .font(Theme.ui(9))
                     .foregroundStyle(Theme.appMuted)
             }
