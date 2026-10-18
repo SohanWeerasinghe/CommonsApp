@@ -100,15 +100,31 @@ struct BorrowRequest: Identifiable, Equatable {
 
 //Event structure
 
+
 struct BuildingEvent: Identifiable, Codable, Equatable {
-    var id           = UUID()
+    var id = UUID()
     var title: String
     var date: Date
     var location: String
-    var allowsRSVP: Bool  = true
+    var allowsRSVP: Bool = true
     var attendeeCount: Int = 0
     var isGoing: Bool = false
+    var description: String = ""
+    var endDate: Date? = nil
+    var status: Status = .active
+    var createdBy: String = ""
+    var firestoreId: String? = nil
+
+    enum Status: String, Codable {
+        case active
+        case cancelled
+    }
+
+    var isCancelled: Bool {
+        status == .cancelled
+    }
 }
+
 
 struct MaintenanceRequest: Identifiable, Codable, Equatable {
     var id = UUID()

@@ -165,7 +165,8 @@ struct LatestPostSection: View {
                 }
                 .buttonStyle(.plain)
             }
-            let posts = store.posts.filter { !$0.isPinned }
+            let posts = (store.posts.filter { !$0.isPinned } + store.eventNoticePosts)
+                .sorted { $0.timestamp > $1.timestamp }
             if posts.isEmpty {
                 VStack(spacing: 10) {
                     Image(systemName: "text.bubble")
@@ -279,34 +280,51 @@ struct DynamicImagePlaceholder: View {
 }
 
 struct UpcomingEventSection: View {
+    @EnvironmentObject private var store: AppStore
+
+    private var upcoming: [BuildingEvent] {
+        store.events.filter { !$0.isCancelled && $0.date >= Date() }
+            .sorted { $0.date < $1.date }
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Coming up")
                 .font(.system(size: 21, weight: .bold, design: .rounded))
                 .foregroundStyle(WallStyle.navy)
-            HStack(spacing: 13) {
-                Image(systemName: "calendar.badge.clock")
-                    .font(.system(size: 20, weight: .medium))
-                    .foregroundStyle(WallStyle.purple)
-                    .frame(width: 48, height: 48)
-                    .background(WallStyle.soft, in: RoundedRectangle(cornerRadius: 15))
-                VStack(alignment: .leading, spacing: 5) {
-                    Text("Residents meeting")
-                        .font(.system(size: 14, weight: .bold))
-                        .foregroundStyle(WallStyle.navy)
-                    Text("Tomorrow · 6:30 PM")
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(WallStyle.purple)
-                    Text("Community Room")
-                        .font(.system(size: 11))
-                        .foregroundStyle(WallStyle.muted)
+            if upcoming.isEmpty {
+                Text("No upcoming community events")
+                    .font(.system(size: 13))
+                    .foregroundStyle(WallStyle.muted)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(18)
+                    .background(.white, in: RoundedRectangle(cornerRadius: 20))
+            } else {
+                ForEach(upcoming.prefix(3)) { event in
+                    HStack(spacing: 13) {
+                        Image(systemName: "calendar.badge.clock")
+                            .font(.system(size: 20))
+                            .foregroundStyle(WallStyle.purple)
+                            .frame(width: 48, height: 48)
+                            .background(WallStyle.soft, in: RoundedRectangle(cornerRadius: 15))
+                        VStack(alignment: .leading, spacing: 5) {
+                            Text(event.title)
+                                .font(.system(size: 14, weight: .bold))
+                                .foregroundStyle(WallStyle.navy)
+                            Text(event.date.formatted(date: .abbreviated, time: .shortened))
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundStyle(WallStyle.purple)
+                            Text(event.location)
+                                .font(.system(size: 11))
+                                .foregroundStyle(WallStyle.muted)
+                        }
+                        Spacer()
+                    }
+                    .padding(15)
+                    .background(.white, in: RoundedRectangle(cornerRadius: 22))
+                    .overlay(RoundedRectangle(cornerRadius: 22).stroke(WallStyle.line))
                 }
-                Spacer()
             }
-            .padding(15)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(.white, in: RoundedRectangle(cornerRadius: 22))
-            .overlay(RoundedRectangle(cornerRadius: 22).stroke(WallStyle.line, lineWidth: 1))
         }
     }
 }

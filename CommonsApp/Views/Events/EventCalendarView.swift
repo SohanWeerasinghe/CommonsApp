@@ -12,6 +12,7 @@ struct EventCalendarView: View {
     @EnvironmentObject private var store: AppStore
     @State private var displayedMonth = Calendar.current.startOfDay(for: Date())
     @State private var selectedDate = Calendar.current.startOfDay(for: Date())
+    @State private var showCreateEvent = false
     private let calendar = Calendar.current
 
     private var selectedEvents: [BuildingEvent] {
@@ -19,7 +20,7 @@ struct EventCalendarView: View {
             .sorted { $0.date < $1.date }
     }
     private var upcomingEvents: [BuildingEvent] {
-        store.events.filter { $0.date >= calendar.startOfDay(for: Date()) }
+        store.events.filter { !$0.isCancelled && $0.date >= calendar.startOfDay(for: Date()) }
             .sorted { $0.date < $1.date }
     }
 
@@ -41,6 +42,10 @@ struct EventCalendarView: View {
             .scrollIndicators(.hidden)
         }
         .toolbar(.hidden, for: .navigationBar)
+        .sheet(isPresented: $showCreateEvent) {
+            NavigationStack { CommunityEventEditor(existing: nil) }
+                .environmentObject(store)
+        }
         .preferredColorScheme(.light)
     }
 
@@ -55,6 +60,14 @@ struct EventCalendarView: View {
                     .foregroundStyle(EventStyle.navy)
             }
             Spacer(minLength: 6)
+            if store.onboardingStage == .admin {
+                Button { showCreateEvent = true } label: {
+                    Label("Create", systemImage: "plus.circle.fill")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(EventStyle.purple)
+                }
+                .accessibilityLabel("Create event")
+            }
             Image(systemName: "calendar.badge.clock")
                 .font(.system(size: 21, weight: .semibold))
                 .foregroundStyle(EventStyle.purple)
@@ -163,7 +176,7 @@ struct EventCalendarView: View {
 
     private func dayButton(_ date: Date) -> some View {
         let selected = calendar.isDate(date, inSameDayAs: selectedDate)
-        let hasEvent = store.events.contains { calendar.isDate($0.date, inSameDayAs: date) }
+        let hasEvent = store.events.contains { !$0.isCancelled && calendar.isDate($0.date, inSameDayAs: date) }
         let today = calendar.isDateInToday(date)
         return Button { selectedDate = date } label: {
             VStack(spacing: 4) {
@@ -282,7 +295,16 @@ private struct EventRedesignedCard: View {
             .foregroundStyle(EventStyle.muted)
             Spacer(minLength: 0)
             VStack(spacing: 10) {
-                if event.allowsRSVP {
+                if event.isCancelled {
+                    Text("CANCELLED")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(.red)
+                        .padding(.horizontal, 10).padding(.vertical, 7)
+                        .background(Color.red.opacity(0.09), in: Capsule())
+                }
+                if event.allowsRSVP &&
+                   !event.isCancelled &&
+                   event.date > Date() {
                     Button { store.toggleRSVP(for: event) } label: {
                         Text(event.isGoing ? "Going" : "RSVP")
                             .font(.system(size: 11, weight: .bold))
@@ -305,3 +327,6 @@ private struct EventRedesignedCard: View {
 #Preview {
     NavigationStack { EventCalendarView().environmentObject(AppStore()) }
 }
+
+
+// Administrator event creation and editing.
