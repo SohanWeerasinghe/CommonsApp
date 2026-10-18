@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		72073BAF3083F9A40032F504 /* BorrowingFlowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 72073BAE3083F9A40032F504 /* BorrowingFlowView.swift */; };
 		72387211306BB0570061D2FD /* CommonsAppApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7238720E306BB0570061D2FD /* CommonsAppApp.swift */; };
 		72387212306BB0570061D2FD /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 72387210306BB0570061D2FD /* RootView.swift */; };
 		72387213306BB0570061D2FD /* MainTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7238720F306BB0570061D2FD /* MainTabView.swift */; };
@@ -73,6 +74,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		72073BAE3083F9A40032F504 /* BorrowingFlowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BorrowingFlowView.swift; sourceTree = "<group>"; };
 		7238720E306BB0570061D2FD /* CommonsAppApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommonsAppApp.swift; sourceTree = "<group>"; };
 		7238720F306BB0570061D2FD /* MainTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainTabView.swift; sourceTree = "<group>"; };
 		72387210306BB0570061D2FD /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
@@ -227,6 +229,7 @@
 		7238722B306BB0F70061D2FD /* LendBorrow */ = {
 			isa = PBXGroup;
 			children = (
+				72073BAE3083F9A40032F504 /* BorrowingFlowView.swift */,
 				72387229306BB0F70061D2FD /* LendBorrowView.swift */,
 				7238722A306BB0F70061D2FD /* NewItemView.swift */,
 			);
@@ -456,6 +459,7 @@
 				72387211306BB0570061D2FD /* CommonsAppApp.swift in Sources */,
 				72387212306BB0570061D2FD /* RootView.swift in Sources */,
 				7238723E306BB0F70061D2FD /* ProfileSetupView.swift in Sources */,
+				72073BAF3083F9A40032F504 /* BorrowingFlowView.swift in Sources */,
 				7238723F306BB0F70061D2FD /* ChatListView.swift in Sources */,
 				72387240306BB0F70061D2FD /* EventDetailView.swift in Sources */,
 				72387241306BB0F70061D2FD /* SignInView.swift in Sources */,

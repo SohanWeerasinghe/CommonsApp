@@ -1,0 +1,448 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    match /users/{userId} {
+
+      function isOwner() {
+        return request.auth != null
+          && request.auth.uid == userId;
+      }
+
+      function isAdmin() {
+        return request.auth != null
+          && request.auth.token.get('admin', false) == true;
+      }
+
+      allow create: if isOwner()
+        && !isAdmin()
+        && request.resource.data.keys().hasOnly([
+          'name', 'unit', 'phone', 'email',
+          'contactPreference', 'showUnitToNeighbors',
+          'approvalStatus', 'createdAt'
+        ])
+        && request.resource.data.keys().hasAll([
+          'name', 'unit', 'phone', 'email',
+          'contactPreference', 'showUnitToNeighbors',
+          'approvalStatus', 'createdAt'
+        ])
+        && request.resource.data.email == request.auth.token.email
+        && request.resource.data.approvalStatus == 'pending'
+        && request.resource.data.name is string
+        && request.resource.data.unit is string
+        && request.resource.data.phone is string
+        && request.resource.data.email is string
+        && request.resource.data.contactPreference is string
+        && request.resource.data.showUnitToNeighbors is bool
+        && request.resource.data.createdAt == request.time;
+
+      allow read: if isOwner() || isAdmin();
+
+      allow update: if (
+        isOwner()
+        && !isAdmin()
+        && request.resource.data.diff(resource.data)
+          .affectedKeys().hasOnly([
+            'name', 'unit', 'phone',
+            'contactPreference', 'showUnitToNeighbors'
+          ])
+      ) || (
+        isAdmin()
+        && request.resource.data.diff(resource.data)
+          .affectedKeys().hasOnly(['approvalStatus'])
+        && request.resource.data.approvalStatus in [
+          'pending', 'approved', 'declined'
+        ]
+      );
+
+      allow delete: if false;
+    }
+
+
+    match /residentDirectory/{residentId} {
+
+      function isApprovedResident() {
+        return request.auth != null
+          && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+          && get(/databases/$(database)/documents/users/$(request.auth.uid))
+            .data.approvalStatus == 'approved';
+      }
+
+      allow get, list: if isApprovedResident();
+
+      // Directory entries are maintained by a trusted backend.
+      allow create, update, delete: if false;
+    }
+
+    match /announcements/{announcementId} {
+
+      function isAdmin() {
+        return request.auth != null
+          && request.auth.token.get('admin', false) == true;
+      }
+
+      function isApprovedResident() {
+        return request.auth != null
+          && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+          && get(/databases/$(database)/documents/users/$(request.auth.uid))
+            .data.approvalStatus == 'approved';
+      }
+
+      allow read: if isAdmin() || isApprovedResident();
+
+      allow create: if isAdmin()
+        && request.resource.data.keys().hasOnly([
+          'text', 'createdAt', 'createdBy', 'isPinned'
+        ])
+        && request.resource.data.keys().hasAll([
+          'text', 'createdAt', 'createdBy', 'isPinned'
+        ])
+        && request.resource.data.text is string
+        && request.resource.data.text.size() > 0
+        && request.resource.data.text.size() <= 2000
+        && request.resource.data.createdBy == request.auth.uid
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.isPinned == true;
+
+      allow update, delete: if false;
+    }
+
+   match /posts/{postId} {
+
+  function isAdmin() {
+    return request.auth != null
+      && request.auth.token.get('admin', false) == true;
+  }
+
+  function isApprovedResident() {
+    return request.auth != null
+      && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+      && get(/databases/$(database)/documents/users/$(request.auth.uid))
+        .data.approvalStatus == 'approved';
+  }
+
+  function profile() {
+    return get(
+      /databases/$(database)/documents/users/$(request.auth.uid)
+    ).data;
+  }
+
+  function validAuthorPrivacy() {
+    let p = request.resource.data;
+
+    return p.showAuthorName is bool
+      && p.showAuthorUnit is bool
+      && p.authorName is string
+      && p.authorUnit is string
+
+      && (
+        (
+          p.showAuthorName == false
+          && p.showAuthorUnit == false
+          && p.authorName == ''
+          && p.authorUnit == ''
+        )
+        ||
+        (
+          p.showAuthorName == true
+          && p.authorName == profile().name
+          && (
+            (
+              p.showAuthorUnit == false
+              && p.authorUnit == ''
+            )
+            ||
+            (
+              p.showAuthorUnit == true
+              && profile().showUnitToNeighbors == true
+              && p.authorUnit == profile().unit
+              && p.authorUnit != ''
+            )
+          )
+        )
+      );
+  }
+
+  allow read: if isApprovedResident() || isAdmin();
+
+  allow create: if isApprovedResident()
+
+    && request.resource.data.keys().hasOnly([
+      'text',
+      'category',
+      'createdAt',
+      'createdBy',
+      'showAuthorName',
+      'showAuthorUnit',
+      'authorName',
+      'authorUnit'
+    ])
+
+    && request.resource.data.keys().hasAll([
+      'text',
+      'category',
+      'createdAt',
+      'createdBy',
+      'showAuthorName',
+      'showAuthorUnit',
+      'authorName',
+      'authorUnit'
+    ])
+
+    && request.resource.data.text is string
+    && request.resource.data.text.size() > 0
+    && request.resource.data.text.size() <= 2000
+
+    && request.resource.data.category in [
+      'News',
+      'Ask for Help'
+    ]
+
+    && request.resource.data.createdBy == request.auth.uid
+    && request.resource.data.createdAt == request.time
+
+    && validAuthorPrivacy();
+
+  allow update, delete: if false;
+}
+
+    // Insert inside match /databases/{database}/documents, beside /posts.
+    match /sharedItems/{itemId} {
+      function approved() {
+        return request.auth != null
+          && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+          && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.approvalStatus == 'approved';
+      }
+      function profile() {
+        return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+      }
+      allow get, list: if approved();
+      allow create: if approved()
+        && request.resource.data.keys().hasOnly(['name','detail','status','availability','ownerUID','ownerName','ownerUnit','createdAt','isPublished'])
+        && request.resource.data.keys().hasAll(['name','detail','status','availability','ownerUID','ownerName','ownerUnit','createdAt','isPublished'])
+        && request.resource.data.ownerUID == request.auth.uid
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && request.resource.data.name.size() <= 100
+        && request.resource.data.detail is string
+        && request.resource.data.detail.size() <= 1000
+        && request.resource.data.status in ['Lending', 'Needed']
+        && request.resource.data.availability in ['Available now', 'Weekends only']
+        && request.resource.data.ownerName == profile().name
+        && request.resource.data.ownerUnit == (profile().showUnitToNeighbors == true ? profile().unit : '')
+        && request.resource.data.createdAt == request.time;
+      // Milestone 5: lock changes only, coupled to request transitions.
+      function requestBefore(id) {
+        return get(/databases/$(database)/documents/borrowRequests/$(id)).data;
+      }
+      function requestAfter(id) {
+        return getAfter(/databases/$(database)/documents/borrowRequests/$(id)).data;
+      }
+      function lockAcquired(id) {
+        let after = requestAfter(id);
+        return resource.data.get('activeRequestId', '') == ''
+          && request.resource.data.activeRequestId == id
+          && !exists(/databases/$(database)/documents/borrowRequests/$(id))
+          && after.status == 'pending'
+          && after.itemId == itemId
+          && after.ownerUID == resource.data.ownerUID
+          && after.borrowerUID == request.auth.uid
+          && after.get('listingStatus', 'Lending') == resource.data.status
+          && resource.data.get('isPublished', true) == true
+          && request.resource.data.get('isPublished', true) == true;
+      }
+      function lockReleased(id) {
+        let before = requestBefore(id);
+        let after = requestAfter(id);
+        return resource.data.get('activeRequestId', '') == id
+          && request.resource.data.activeRequestId == ''
+          && before.itemId == itemId && after.itemId == itemId
+          && before.ownerUID == resource.data.ownerUID
+          && after.ownerUID == resource.data.ownerUID
+          && before.get('listingStatus', 'Lending') == resource.data.status
+          && after.get('listingStatus', 'Lending') == resource.data.status
+          && request.resource.data.get('isPublished', true) is bool
+          && (request.resource.data.get('isPublished', true) == resource.data.get('isPublished', true)
+              || (before.status == 'collected' && after.status == 'returned'
+                  && before.get('listingStatus', 'Lending') == 'Lending'))
+          && ((before.status == 'collected' && after.status == 'returned'
+               && request.auth.uid == (before.get('listingStatus', 'Lending') == 'Needed' ? before.borrowerUID : before.ownerUID))
+            || (before.status == 'pending' && after.status == 'declined'
+               && request.auth.uid == before.ownerUID)
+            || (before.status in ['pending', 'approved'] && after.status == 'cancelled'
+               && request.auth.uid == before.borrowerUID));
+      }
+      allow update: if approved()
+        && resource.data.status in ['Lending', 'Needed']
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['activeRequestId','isPublished'])
+        && request.resource.data.activeRequestId is string
+        && ((request.resource.data.activeRequestId != ''
+              && lockAcquired(request.resource.data.activeRequestId))
+          || (resource.data.get('activeRequestId', '') != ''
+              && lockReleased(resource.data.activeRequestId))
+          || (request.auth.uid == resource.data.ownerUID
+              && resource.data.get('activeRequestId', '') == ''
+              && request.resource.data.get('activeRequestId', '') == ''
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isPublished'])
+              && request.resource.data.isPublished is bool));
+      allow delete: if false;
+    }
+
+
+
+    // Milestone 5: private borrowing lifecycle.
+    match /borrowRequests/{requestId} {
+      function approved() {
+        return request.auth != null
+          && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+          && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.approvalStatus == 'approved';
+      }
+      function participant(d) {
+        return request.auth.uid == d.ownerUID || request.auth.uid == d.borrowerUID;
+      }
+      function listing(d) {
+        return get(/databases/$(database)/documents/sharedItems/$(d.itemId)).data;
+      }
+      function beforeItem(d) {
+        return get(/databases/$(database)/documents/sharedItems/$(d.itemId)).data;
+      }
+      function afterItem(d) {
+        return getAfter(/databases/$(database)/documents/sharedItems/$(d.itemId)).data;
+      }
+      function validCreate(d) {
+        return d.keys().hasOnly(['itemId','itemName','ownerUID','borrowerUID','participantIds','requesterName','startDate','endDate','note','status','createdAt','updatedAt','listingStatus'])
+          && d.keys().hasAll(['itemId','itemName','ownerUID','borrowerUID','participantIds','requesterName','startDate','endDate','note','status','createdAt','updatedAt'])
+          && d.itemId is string && d.itemId.size() > 0
+          && d.itemName is string && d.itemName.size() > 0 && d.itemName.size() <= 100
+          && d.ownerUID is string && d.borrowerUID == request.auth.uid && d.ownerUID != d.borrowerUID
+          && d.participantIds is list && d.participantIds.size() == 2
+          && d.participantIds.hasAll([d.ownerUID, d.borrowerUID])
+          && d.requesterName == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.name
+          && d.note is string && d.note.size() <= 500
+          && d.startDate is timestamp && d.endDate is timestamp
+          && d.startDate >= request.time - duration.value(1, 'd')
+          && d.endDate >= d.startDate && d.endDate <= d.startDate + duration.value(60, 'd')
+          && d.status == 'pending' && d.createdAt == request.time && d.updatedAt == request.time
+          && exists(/databases/$(database)/documents/sharedItems/$(d.itemId))
+          && listing(d).ownerUID == d.ownerUID && listing(d).name == d.itemName
+          && listing(d).status == d.get('listingStatus', 'Lending')
+          && d.get('listingStatus', 'Lending') in ['Lending', 'Needed']
+          && listing(d).get('isPublished', true) == true
+          && listing(d).get('activeRequestId', '') == ''
+          && afterItem(d).activeRequestId == requestId;
+      }
+      function transition(old, next) {
+        return (request.auth.uid == old.ownerUID && (
+            (old.status == 'pending' && next.status in ['approved','declined']) ||
+            (old.status == 'approved' && next.status == 'collected') ||
+            (old.status == 'collected' && next.status == 'returned' && old.get('listingStatus', 'Lending') == 'Lending')
+          )) || (request.auth.uid == old.borrowerUID && (
+            (old.status in ['pending','approved']) && next.status == 'cancelled'
+            || (old.status == 'collected' && next.status == 'returned' && old.get('listingStatus', 'Lending') == 'Needed')
+          ));
+      }
+      function lockValid(old, next) {
+        let before = beforeItem(old).get('activeRequestId', '');
+        let after = afterItem(old).get('activeRequestId', '');
+        return (old.status == 'pending' && next.status == 'approved'
+                  && before == requestId && after == requestId)
+          || (old.status == 'approved' && next.status == 'collected'
+                  && before == requestId && after == requestId)
+          || (old.status == 'collected' && next.status == 'returned'
+                  && before == requestId && after == '')
+          || (old.status == 'approved' && next.status == 'cancelled'
+                  && before == requestId && after == '')
+          || (old.status == 'pending' && next.status in ['declined','cancelled']
+                  && before == requestId && after == '');
+      }
+      allow get: if approved() && participant(resource.data);
+      allow list: if approved()
+        && request.auth.uid in resource.data.participantIds;
+      allow create: if approved() && validCreate(request.resource.data);
+      allow update: if approved() && participant(resource.data)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status','updatedAt'])
+        && request.resource.data.updatedAt == request.time
+        && request.resource.data.get('listingStatus', 'Lending') == resource.data.get('listingStatus', 'Lending')
+        && transition(resource.data, request.resource.data)
+        && lockValid(resource.data, request.resource.data);
+      allow delete: if false;
+    }
+
+        // Private resident-to-resident Chat
+    match /chats/{chatId} {
+
+      function isApproved(uid) {
+        return request.auth != null
+          && exists(/databases/$(database)/documents/users/$(uid))
+          && get(/databases/$(database)/documents/users/$(uid))
+            .data.approvalStatus == 'approved';
+      }
+
+      function validParticipants(participants) {
+        return participants is list
+          && participants.size() == 2
+          && participants[0] is string
+          && participants[1] is string
+          && participants[0] != participants[1]
+          && request.auth.uid in participants
+          && isApproved(participants[0])
+          && isApproved(participants[1]);
+      }
+
+      function isParticipant() {
+        return request.auth != null
+          && isApproved(request.auth.uid)
+          && request.auth.uid in resource.data.participantIds;
+      }
+
+      allow get, list: if isParticipant();
+
+      allow create: if request.auth != null
+        && isApproved(request.auth.uid)
+        && request.resource.data.keys().hasOnly([
+          'participantIds', 'createdAt', 'updatedAt'
+        ])
+        && request.resource.data.keys().hasAll([
+          'participantIds', 'createdAt', 'updatedAt'
+        ])
+        && validParticipants(request.resource.data.participantIds)
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time;
+
+      allow update, delete: if false;
+
+      match /messages/{messageId} {
+
+        function parentChat() {
+          return get(
+            /databases/$(database)/documents/chats/$(chatId)
+          ).data;
+        }
+
+        function canAccessChat() {
+          return request.auth != null
+            && isApproved(request.auth.uid)
+            && request.auth.uid in parentChat().participantIds;
+        }
+
+        allow get, list: if canAccessChat();
+
+        allow create: if canAccessChat()
+          && request.resource.data.keys().hasOnly([
+            'senderId', 'text', 'createdAt'
+          ])
+          && request.resource.data.keys().hasAll([
+            'senderId', 'text', 'createdAt'
+          ])
+          && request.resource.data.senderId == request.auth.uid
+          && request.resource.data.text is string
+          && request.resource.data.text.size() > 0
+          && request.resource.data.text.size() <= 2000
+          && request.resource.data.createdAt == request.time;
+
+        allow update, delete: if false;
+      }
+    }
+  }
+}

@@ -16,6 +16,8 @@ struct NewItemView: View {
     @State private var detail = ""
     @State private var status: SharedItem.Status = .lending
     @State private var availability = "Available now"
+    @State private var isSaving = false
+    @State private var saveError: String?
 
     let availabilityOptions = ["Available now", "Weekends only"]
 
@@ -179,7 +181,7 @@ struct NewItemView: View {
                                 .clipShape(Capsule())
                         }
                         .buttonStyle(.plain)
-                        .disabled(name.isEmpty)
+                        .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isSaving)
                         .padding(.top, 4)
                     }
                     .padding(.horizontal, 20)
@@ -188,6 +190,11 @@ struct NewItemView: View {
                 }
                 .scrollIndicators(.hidden)
             }
+            .alert("Unable to publish item", isPresented: Binding(
+                get: { saveError != nil },
+                set: { if !$0 { saveError = nil } })) {
+                Button("OK", role: .cancel) { saveError = nil }
+            } message: { Text(saveError ?? "") }
             .navigationTitle("Add Item")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -205,27 +212,25 @@ struct NewItemView: View {
                     }
                     .font(Theme.ui(14, weight: .bold))
                     .foregroundStyle(name.isEmpty ? Theme.appMuted : Theme.appPurple)
-                    .disabled(name.isEmpty)
+                    .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isSaving)
                 }
             }
         }
     }
 
     func addItem() {
-        if name.isEmpty {
-            return
+        guard !isSaving else { return }
+        isSaving = true
+        Task { @MainActor in
+            defer { isSaving = false }
+            do {
+                try await store.publishSharedItem(name: name, detail: detail,
+                                                   status: status, availability: availability)
+                dismiss()
+            } catch {
+                saveError = error.localizedDescription
+            }
         }
-
-        let newItem = SharedItem(
-            name: name,
-            detail: detail,
-            ownerName: store.currentResident.name,
-            ownerUnit: store.currentResident.unit,
-            status: status
-        )
-
-        store.items.insert(newItem, at: 0)
-        dismiss()
     }
 }
 

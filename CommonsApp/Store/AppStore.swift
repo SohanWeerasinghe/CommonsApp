@@ -23,6 +23,11 @@ final class AppStore: ObservableObject {
     
     //Lend & Borrow
     @Published var items: [SharedItem] = []
+    @Published var reservedSharedItemIds: Set<String> = []
+    @Published var unpublishedSharedItemIds: Set<String> = []
+    @Published var borrowRequests: [BorrowRequest] = []
+    @Published var borrowRequestsError: String? = nil
+    private var borrowRequestsListener: ListenerRegistration?
     
     //Events
     @Published var events: [BuildingEvent] = []
@@ -40,6 +45,8 @@ final class AppStore: ObservableObject {
     @Published var pinnedAnnouncementText: String = ""
     private var announcementListener: ListenerRegistration?
     private var residentPostsListener: ListenerRegistration?
+    private var sharedItemsListener: ListenerRegistration?
+    @Published var sharedItemsError: String? = nil
     private var chatDirectory: [String: (name: String, unit: String)] = [:]
     private var chatThreadsListener: ListenerRegistration?
     private var chatMessageListeners: [String: ListenerRegistration] = [:]
@@ -89,6 +96,12 @@ final class AppStore: ObservableObject {
         // Stop Firestore listeners.
         stopAnnouncementListener()
         stopResidentPostsListener()
+        stopSharedItemsListener()
+        stopBorrowRequestsListener()
+        borrowRequests.removeAll()
+        items.removeAll()
+        reservedSharedItemIds.removeAll()
+        unpublishedSharedItemIds.removeAll()
         stopChatListeners()
         chatDirectory.removeAll()
 
@@ -172,6 +185,8 @@ final class AppStore: ObservableObject {
             switch approvalStatus {
             case "approved":
                 onboardingStage = .active
+                startSharedItemsListener()
+                startBorrowRequestsListener()
             case "declined":
                 onboardingStage = .accessDeclined
             default:
@@ -688,8 +703,7 @@ final class AppStore: ObservableObject {
             throw NSError(
                 domain: "CommonsApp.Chat",
                 code: 1,
-                userInfo: [
-                    NSLocalizedDescriptionKey: "Invalid chat participants."
+                userInfo: [NSLocalizedDescriptionKey: "Invalid chat participants."
                 ]
             )
         }
@@ -725,26 +739,277 @@ final class AppStore: ObservableObject {
     
     //Lend & Borrow
     
-    func requestItem(_ item: SharedItem) -> ChatThread {
-        // Check if we already have a chat with this neighbor
-        for thread in chatThreads {
-            if thread.neighborUnit == item.ownerUnit {
-                return thread
+    @MainActor
+    func startSharedItemsListener() {
+        guard sharedItemsListener == nil, onboardingStage == .active,
+              let uid = Auth.auth().currentUser?.uid else { return }
+        sharedItemsError = nil
+        sharedItemsListener = Firestore.firestore().collection("sharedItems")
+            .order(by: "createdAt", descending: true).limit(to: 100)
+            .addSnapshotListener { [weak self] snapshot, error in
+                Task { @MainActor [weak self] in
+                    guard let self = self, Auth.auth().currentUser?.uid == uid,
+                          self.onboardingStage == .active else { return }
+                    if let error = error {
+                        self.sharedItemsError = error.localizedDescription
+                        return
+                    }
+                    self.sharedItemsError = nil
+                    self.unpublishedSharedItemIds = Set((snapshot?.documents ?? []).compactMap { doc in
+                    (doc.data()["isPublished"] as? Bool == false) ? doc.documentID : nil
+                })
+                self.reservedSharedItemIds = Set((snapshot?.documents ?? []).compactMap { doc in
+                    let lock = doc.data()["activeRequestId"] as? String ?? ""
+                    return lock.isEmpty ? nil : doc.documentID
+                })
+                self.items = (snapshot?.documents ?? []).compactMap { doc in
+                        let data = doc.data()
+                        guard let name = data["name"] as? String,
+                              let detail = data["detail"] as? String,
+                              let ownerUID = data["ownerUID"] as? String,
+                              let ownerName = data["ownerName"] as? String,
+                              let ownerUnit = data["ownerUnit"] as? String,
+                              let statusString = data["status"] as? String,
+                              let status = SharedItem.Status(rawValue: statusString) else { return nil }
+                        return SharedItem(id: UUID(uuidString: doc.documentID) ?? UUID(),
+                            name: name, detail: detail, ownerName: ownerName,
+                            ownerUnit: ownerUnit, status: status, ownerUID: ownerUID,
+                            availability: data["availability"] as? String ?? "Available now",
+                            firestoreId: doc.documentID)
+                    }
+                }
+            }
+    }
+
+    func stopSharedItemsListener() {
+        sharedItemsListener?.remove()
+        sharedItemsListener = nil
+    }
+
+    @MainActor
+    func publishSharedItem(name: String, detail: String, status: SharedItem.Status,
+                           availability: String) async throws {
+        guard onboardingStage == .active, let uid = Auth.auth().currentUser?.uid else {
+            throw NSError(domain: "CommonsApp.Items", code: 403,
+                          userInfo: [NSLocalizedDescriptionKey: "Approved resident required."])
+        }
+        let title = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let description = detail.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !title.isEmpty, title.count <= 100, description.count <= 1000,
+              ["Available now", "Weekends only"].contains(availability) else {
+            throw NSError(domain: "CommonsApp.Items", code: 400,
+                          userInfo: [NSLocalizedDescriptionKey: "Check the item name and description."])
+        }
+        let profile = try await Firestore.firestore().collection("users")
+            .document(uid).getDocument(source: .server)
+        guard let data = profile.data(), data["approvalStatus"] as? String == "approved" else {
+            throw NSError(domain: "CommonsApp.Items", code: 403,
+                          userInfo: [NSLocalizedDescriptionKey: "Approved resident required."])
+        }
+        try await Firestore.firestore().collection("sharedItems").addDocument(data: [
+            "name": title, "detail": description, "status": status.rawValue,
+            "availability": availability, "ownerUID": uid,
+            "ownerName": data["name"] as? String ?? "Resident",
+            "ownerUnit": data["showUnitToNeighbors"] as? Bool == true
+                ? (data["unit"] as? String ?? "") : "",
+            "createdAt": FieldValue.serverTimestamp(),
+            "isPublished": true
+        ])
+    }
+
+    // Requests are independent of Chat. Read only requests involving this UID.
+    @MainActor
+    func startBorrowRequestsListener() {
+        guard borrowRequestsListener == nil, onboardingStage == .active,
+              let uid = Auth.auth().currentUser?.uid else { return }
+        borrowRequestsError = nil
+        // Two participant queries would need merging; the authorized collection
+        // query uses a participantIds array to receive both incoming and outgoing.
+        borrowRequestsListener = Firestore.firestore().collection("borrowRequests")
+            .whereField("participantIds", arrayContains: uid)
+            .addSnapshotListener { [weak self] snapshot, error in
+                Task { @MainActor [weak self] in
+                    guard let self, Auth.auth().currentUser?.uid == uid,
+                          self.onboardingStage == .active else { return }
+                    if let error { self.borrowRequestsError = error.localizedDescription; return }
+                    self.borrowRequestsError = nil
+                    self.borrowRequests = (snapshot?.documents ?? []).compactMap { doc in
+                        let d = doc.data()
+                        guard let itemId = d["itemId"] as? String,
+                              let itemName = d["itemName"] as? String,
+                              let owner = d["ownerUID"] as? String,
+                              let borrower = d["borrowerUID"] as? String,
+                              let requester = d["requesterName"] as? String,
+                              let start = (d["startDate"] as? Timestamp)?.dateValue(),
+                              let end = (d["endDate"] as? Timestamp)?.dateValue(),
+                              let statusRaw = d["status"] as? String,
+                              let status = BorrowRequest.Status(rawValue: statusRaw) else { return nil }
+                        return BorrowRequest(id: doc.documentID, itemId: itemId,
+                            itemName: itemName, ownerUID: owner, borrowerUID: borrower,
+                            requesterName: requester, startDate: start, endDate: end,
+                            note: d["note"] as? String ?? "", status: status,
+                            createdAt: (d["createdAt"] as? Timestamp)?.dateValue() ?? .distantPast,
+                            listingStatus: d["listingStatus"] as? String ?? "Lending")
+                    }.sorted { $0.createdAt > $1.createdAt }
+                }
+            }
+    }
+
+    func stopBorrowRequestsListener() {
+        borrowRequestsListener?.remove()
+        borrowRequestsListener = nil
+    }
+
+    @MainActor
+    func submitBorrowRequest(for item: SharedItem, startDate: Date,
+                             endDate: Date, note: String) async throws {
+        guard onboardingStage == .active, let uid = Auth.auth().currentUser?.uid,
+              let owner = item.ownerUID, owner != uid else {
+            throw itemError("You cannot request this listing.")
+        }
+        let start = Calendar.current.startOfDay(for: startDate)
+        let end = Calendar.current.startOfDay(for: endDate)
+        guard start >= Calendar.current.startOfDay(for: Date()), end >= start,
+              end.timeIntervalSince(start) <= 60 * 86400, note.count <= 500 else {
+            throw itemError("Choose valid dates (up to 60 days) and a note under 500 characters.")
+        }
+        guard let firestoreId = item.firestoreId, !firestoreId.isEmpty else {
+            throw itemError("This listing has no Firestore document ID. Refresh and try again.")
+        }
+        let db = Firestore.firestore()
+        let itemRef = db.collection("sharedItems").document(firestoreId)
+        let requestRef = db.collection("borrowRequests").document()
+        let profile = try await db.collection("users").document(uid).getDocument(source: .server)
+        guard let resident = profile.data(), resident["approvalStatus"] as? String == "approved" else {
+            throw itemError("Approved resident required.")
+        }
+        let requesterName = resident["name"] as? String ?? "Resident"
+        let itemName = item.name
+        let trimmedNote = note.trimmingCharacters(in: .whitespacesAndNewlines)
+        _ = try await db.runTransaction { transaction, errorPointer -> Any? in
+            do {
+                let listing = try transaction.getDocument(itemRef)
+                guard let data = listing.data(),
+                      data["ownerUID"] as? String == owner,
+                      data["status"] as? String == item.status.rawValue,
+                      data["isPublished"] as? Bool != false,
+                      data["name"] as? String == itemName else {
+                    throw NSError(domain: "CommonsApp.Borrow", code: 409,
+                                  userInfo: [NSLocalizedDescriptionKey: "This listing is no longer available."])
+                }
+                guard (data["activeRequestId"] as? String ?? "").isEmpty else {
+                    throw NSError(domain: "CommonsApp.Borrow", code: 409,
+                                  userInfo: [NSLocalizedDescriptionKey: "This item already has an active borrowing request."])
+                }
+                transaction.setData([
+                    "itemId": firestoreId, "itemName": itemName,
+                    "ownerUID": owner, "borrowerUID": uid,
+                    "listingStatus": item.status.rawValue,
+                    "participantIds": [owner, uid].sorted(),
+                    "requesterName": requesterName,
+                    "startDate": Timestamp(date: start), "endDate": Timestamp(date: end),
+                    "note": trimmedNote, "status": "pending",
+                    "createdAt": FieldValue.serverTimestamp(),
+                    "updatedAt": FieldValue.serverTimestamp()
+                ], forDocument: requestRef)
+                transaction.updateData(["activeRequestId": requestRef.documentID], forDocument: itemRef)
+                return nil
+            } catch {
+                errorPointer?.pointee = error as NSError
+                return nil
             }
         }
-        
-        // If no existing chat, create a new one
-        let thread = ChatThread(
-            neighborName: item.ownerName,
-            neighborUnit: item.ownerUnit,
-            contextNote: "You requested \(item.name) from \(item.ownerName)",
-            messages: []
-        )
-        
-        chatThreads.insert(thread, at: 0)
-        return thread
     }
-    
+
+    @MainActor
+    func advanceBorrowRequest(_ request: BorrowRequest, to next: BorrowRequest.Status, keepPublished: Bool = true) async throws {
+        guard onboardingStage == .active, let uid = Auth.auth().currentUser?.uid else {
+            throw itemError("Please sign in.")
+        }
+        let ownerAction = request.ownerUID == uid
+        let borrowerAction = request.borrowerUID == uid
+        let needed = request.isNeededOffer
+        let permitted: Bool = {
+            switch (request.status, next) {
+            case (.pending, .approved), (.pending, .declined),
+                 (.approved, .collected): return ownerAction
+            case (.collected, .returned): return needed ? borrowerAction : ownerAction
+            case (.pending, .cancelled), (.approved, .cancelled): return borrowerAction
+            default: return false
+            }
+        }()
+        guard permitted else { throw itemError("This action is not permitted.") }
+        let db = Firestore.firestore()
+        let requestRef = db.collection("borrowRequests").document(request.id)
+        let itemRef = db.collection("sharedItems").document(request.itemId)
+        // A transaction serializes approvals against a single active listing.
+        _ = try await db.runTransaction { transaction, errorPointer -> Any? in
+            do {
+                let req = try transaction.getDocument(requestRef)
+                let item = try transaction.getDocument(itemRef)
+                guard let rd = req.data(), let id = item.data(),
+                      rd["status"] as? String == request.status.rawValue,
+                      rd["ownerUID"] as? String == request.ownerUID,
+                      rd["borrowerUID"] as? String == request.borrowerUID,
+                      rd["itemId"] as? String == request.itemId,
+                      (rd["listingStatus"] as? String ?? "Lending") == request.listingStatus,
+                      id["status"] as? String == request.listingStatus,
+                      id["ownerUID"] as? String == request.ownerUID else {
+                    throw NSError(domain: "CommonsApp.Borrow", code: 409, userInfo: [NSLocalizedDescriptionKey: "The request has changed. Refresh and try again."])
+                }
+                let active = id["activeRequestId"] as? String ?? ""
+                guard active == request.id else {
+                    throw NSError(domain: "CommonsApp.Borrow", code: 409,
+                                  userInfo: [NSLocalizedDescriptionKey: "Reservation mismatch. Refresh and try again."])
+                }
+                if next == .returned || next == .declined || next == .cancelled {
+                    if next == .returned {
+                        if needed {
+                            transaction.updateData(["activeRequestId": ""], forDocument: itemRef)
+                        } else {
+                            transaction.updateData(["activeRequestId": "", "isPublished": keepPublished], forDocument: itemRef)
+                        }
+                    } else {
+                        transaction.updateData(["activeRequestId": ""], forDocument: itemRef)
+                    }
+                }
+                transaction.updateData(["status": next.rawValue,
+                                        "updatedAt": FieldValue.serverTimestamp()], forDocument: requestRef)
+                return nil
+            } catch {
+                errorPointer?.pointee = error as NSError
+                return nil
+            }
+        }
+    }
+
+    @MainActor
+    func setSharedItemPublished(itemId: String, published: Bool) async throws {
+        guard onboardingStage == .active, let uid = Auth.auth().currentUser?.uid else {
+            throw itemError("Please sign in.")
+        }
+        let ref = Firestore.firestore().collection("sharedItems").document(itemId)
+        _ = try await Firestore.firestore().runTransaction { transaction, errorPointer -> Any? in
+            do {
+                let snap = try transaction.getDocument(ref)
+                guard let data = snap.data(), data["ownerUID"] as? String == uid,
+                      (data["activeRequestId"] as? String ?? "").isEmpty else {
+                    throw self.itemError("Only the owner can change a listing without an active request.")
+                }
+                transaction.updateData(["isPublished": published], forDocument: ref)
+                return nil
+            } catch {
+                errorPointer?.pointee = error as NSError
+                return nil
+            }
+        }
+    }
+
+    private func itemError(_ message: String) -> NSError {
+        NSError(domain: "CommonsApp.Borrow", code: 400,
+                userInfo: [NSLocalizedDescriptionKey: message])
+    }
+
     //Events
     
     func toggleRSVP(for event: BuildingEvent) {
@@ -881,12 +1146,8 @@ final class AppStore: ObservableObject {
             )
         ]
         
-        //Create sample items
-        items = [
-            SharedItem(name: "Power Drill", detail: "Cordless, with bits", ownerName: "Marcus Webb", ownerUnit: "6C", status: .lending),
-            SharedItem(name: "Step Ladder", detail: "6 ft, aluminum", ownerName: "Jae Park", ownerUnit: "2A", status: .lending),
-            SharedItem(name: "Stand Mixer", detail: "Need for weekend baking", ownerName: "Priya Nair", ownerUnit: "4B", status: .needed)
-        ]
+        // Firestore provides shared items for approved residents.
+        items = []
         
         //Create sample events
         events = [

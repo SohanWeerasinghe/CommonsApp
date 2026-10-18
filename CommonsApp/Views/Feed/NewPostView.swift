@@ -1,229 +1,274 @@
-//
-//  NewPostView.swift
-//  CommonsApp
-//
-//  Created by Sohan Weerasinghe on 21/9/2026.
-//
-
 import SwiftUI
 
+private enum PostComposerStyle {
+    static let navy = Color(red: 0.11, green: 0.16, blue: 0.27)
+    static let purple = Color(red: 0.46, green: 0.41, blue: 0.93)
+    static let muted = Color(red: 0.46, green: 0.50, blue: 0.59)
+    static let background = Color(red: 0.97, green: 0.97, blue: 0.99)
+    static let border = Color(red: 0.89, green: 0.90, blue: 0.94)
+}
+
 struct NewPostView: View {
-
-    @EnvironmentObject var store: AppStore
-
-    // dismiss lets us close this sheet
+    @EnvironmentObject private var store: AppStore
     @Environment(\.dismiss) private var dismiss
 
     @State private var text = ""
     @State private var category: Post.Category = .news
-    @State private var hasPhoto = false
     @State private var showAuthorName = true
     @State private var showAuthorUnit = false
     @State private var isSaving = false
     @State private var postError = ""
 
+    private var canPublish: Bool {
+        !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+        text.count <= 2000 && category != .announcement && !isSaving
+    }
+
     var body: some View {
         NavigationStack {
-            ZStack {
-                Theme.paper.ignoresSafeArea()
-
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 20) {
-
-                        // Category picker
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("CATEGORY")
-                                .font(Theme.ui(12, weight: .semibold))
-                                .foregroundStyle(Theme.textMuted)
-
-                            // Show all categories as buttons
-                            HStack(spacing: 10) {
-                                ForEach(Post.Category.allCases, id: \.self) { option in
-                                    Button(option.rawValue) {
-                                        category = option
-                                    }
-                                    .font(Theme.ui(12, weight: .semibold))
-                                    .padding(.vertical, 8)
-                                    .frame(maxWidth: .infinity)
-                                    .foregroundStyle(
-                                        category == option ? Theme.ink : Theme.textMuted
-                                    )
-                                    .background(
-                                        category == option ? Theme.brass : Theme.card
-                                    )
-                                    .clipShape(RoundedRectangle(cornerRadius: 8))
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 8)
-                                            .stroke(Theme.hairline, lineWidth: 1)
-                                    )
-                                }
-                            }
-                        }
-
-                        // Text input
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("YOUR POST")
-                                .font(Theme.ui(12, weight: .semibold))
-                                .foregroundStyle(Theme.textMuted)
-
-                            TextEditor(text: $text)
-                                .foregroundColor(.gray)
-                                .frame(height: 160)
-                                .padding(8)
-                                .scrollContentBackground(.hidden)
-                                .background(Theme.card)
-                                .clipShape(RoundedRectangle(cornerRadius: 10))
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 10)
-                                        .stroke(Theme.hairline, lineWidth: 1)
-                                )
-                        }
-                        // Post privacy settings
-                        VStack(alignment: .leading, spacing: 12) {
-
-                            Text("POST PRIVACY")
-                                .font(Theme.ui(12, weight: .semibold))
-                                .foregroundStyle(Theme.textMuted)
-
-                            Toggle(isOn: $showAuthorName) {
-                                    Label("Show my name", systemImage: "person.crop.circle")
-                                        .foregroundColor(.black)
-                                        .font(.system(size: 15, weight: .medium))
-                                        .foregroundStyle(.primary)
-                                }
-                                .tint(.purple)
-
-                                Divider()
-
-                                Toggle(isOn: $showAuthorUnit) {
-                                    Label("Show my apartment/unit", systemImage: "house")
-                                        .foregroundColor(.black)
-                                        .font(.system(size: 15, weight: .medium))
-                                        .foregroundStyle(.primary)
-                                }
-                                .tint(.purple)
-                                .disabled(
-                                    !showAuthorName ||
-                                    !store.currentResident.showUnitToNeighbors
-                                )
-
-                            if !showAuthorName {
-                                Text("Your post will appear as Anonymous User.")
-                                    .font(Theme.ui(12))
-                                    .foregroundStyle(Theme.textMuted)
-                            }
-
-                            if !store.currentResident.showUnitToNeighbors {
-                                Text("Your profile privacy setting hides your apartment/unit.")
-                                    .font(Theme.ui(12))
-                                    .foregroundStyle(Theme.textMuted)
-                            }
-                        }
-                        .tint(Theme.sage)
-                        .padding(14)
-                        .background(Theme.card)
-                        .clipShape(RoundedRectangle(cornerRadius: 10))
-                        .overlay {
-                            RoundedRectangle(cornerRadius: 10)
-                                .stroke(Theme.hairline, lineWidth: 1)
-                        }
-
-                        // Photo toggle button
-                        Button {
-                            hasPhoto.toggle()
-                        } label: {
-                            HStack(spacing: 10) {
-                                Image(systemName: hasPhoto
-                                      ? "checkmark.circle.fill"
-                                      : "camera")
-                                    .foregroundStyle(
-                                        hasPhoto ? Theme.sage : Theme.textMuted
-                                    )
-                                Text(hasPhoto ? "Photo added" : "Add a photo")
-                                    .font(Theme.ui(13))
-                                    .foregroundStyle(Theme.textMuted)
-                            }
-                            .padding(14)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .background(Theme.card)
-                            .clipShape(RoundedRectangle(cornerRadius: 10))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 10)
-                                    .stroke(Theme.hairline, lineWidth: 1)
-                            )
-                        }
-                        .buttonStyle(.plain)
-                    }
-                    .padding(16)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 24) {
+                    introduction
+                    categorySection
+                    composerSection
+                    privacySection
+                    photoInformation
                 }
+                .padding(.horizontal, 22)
+                .padding(.top, 22)
+                .padding(.bottom, 32)
             }
-            .navigationTitle("New Post")
+            .scrollDismissesKeyboard(.interactively)
+            .background(PostComposerStyle.background.ignoresSafeArea())
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                publishFooter
+            }
+            .navigationTitle("Create post")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                // Cancel button — top left
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") {
-                        dismiss()
-                    }
-                    .alert(
-                        "Unable to Publish Post",
-                        isPresented: Binding(
-                            get: { !postError.isEmpty },
-                            set: { if !$0 { postError = "" } }
-                        )
-                    ) {
-                        Button("OK", role: .cancel) {
-                            postError = ""
-                        }
-                    } message: {
-                        Text(postError)
-                    }
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("Cancel") { dismiss() }
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(PostComposerStyle.navy)
                 }
+            }
+            .tint(PostComposerStyle.purple)
+            .preferredColorScheme(.light)
+            .alert("Unable to Publish Post", isPresented: Binding(
+                get: { !postError.isEmpty },
+                set: { if !$0 { postError = "" } }
+            )) {
+                Button("OK", role: .cancel) { postError = "" }
+            } message: {
+                Text(postError)
+            }
+        }
+    }
 
-                // Post button — top right
-                ToolbarItem(placement: .confirmationAction) {
-                    Button {
-                        guard !isSaving else { return }
+    private var introduction: some View {
+        HStack(alignment: .top, spacing: 14) {
+            Image(systemName: "square.and.pencil")
+                .font(.system(size: 23, weight: .semibold))
+                .foregroundStyle(PostComposerStyle.purple)
+                .frame(width: 54, height: 54)
+                .background(PostComposerStyle.purple.opacity(0.11), in: RoundedRectangle(cornerRadius: 17))
 
-                        isSaving = true
-                        postError = ""
+            VStack(alignment: .leading, spacing: 5) {
+                Text("Share with your neighbours")
+                    .font(.system(size: 22, weight: .bold, design: .rounded))
+                    .foregroundStyle(PostComposerStyle.navy)
+                Text("An update, a question, or something worth sharing with your community.")
+                    .font(.system(size: 13))
+                    .foregroundStyle(PostComposerStyle.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
 
-                        Task {
-                            do {
-                                try await store.saveResidentPostToFirestore(
-                                    text: text,
-                                    category: category,
-                                    showAuthorName: showAuthorName,
-                                    showAuthorUnit: showAuthorUnit
-                                )
-
-                                store.addPost(
-                                    text: text,
-                                    category: category,
-                                    hasPhoto: false
-                                )
-
-                                isSaving = false
-                                dismiss()
-                            } catch {
-                                postError = error.localizedDescription
-                                isSaving = false
+    private var categorySection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            sectionHeading("POST CATEGORY", subtitle: "Choose the best fit for your update")
+            HStack(spacing: 8) {
+                ForEach(Post.Category.allCases, id: \.self) { option in
+                    Button { category = option } label: {
+                        Text(option.rawValue)
+                            .font(.system(size: 12, weight: .semibold))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.75)
+                            .foregroundStyle(category == option ? .white : PostComposerStyle.navy)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 44)
+                            .background(category == option ? PostComposerStyle.purple : .white,
+                                        in: RoundedRectangle(cornerRadius: 14))
+                            .overlay {
+                                RoundedRectangle(cornerRadius: 14)
+                                    .stroke(category == option ? .clear : PostComposerStyle.border, lineWidth: 1)
                             }
-                        }
-                    } label: {
-                        if isSaving {
-                            ProgressView()
-                        } else {
-                            Text("Post")
-                        }
                     }
-                    .disabled(
-                        text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                        || text.count > 2000
-                        || category == .announcement
-                        || isSaving
-                    )
+                    .buttonStyle(.plain)
                 }
+            }
+            if category == .announcement {
+                Label("Announcements are reserved for authorised publishing.", systemImage: "lock.shield")
+                    .font(.system(size: 12))
+                    .foregroundStyle(PostComposerStyle.muted)
+            }
+        }
+    }
+
+    private var composerSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            sectionHeading("YOUR MESSAGE", subtitle: "What would you like to share?")
+            VStack(alignment: .leading, spacing: 8) {
+                ZStack(alignment: .topLeading) {
+                    if text.isEmpty {
+                        Text("Write something for your neighbours…")
+                            .font(.system(size: 15))
+                            .foregroundStyle(PostComposerStyle.muted.opacity(0.8))
+                            .padding(.horizontal, 5)
+                            .padding(.vertical, 9)
+                            .allowsHitTesting(false)
+                    }
+                    TextEditor(text: $text)
+                        .font(.system(size: 15))
+                        .foregroundStyle(PostComposerStyle.navy)
+                        .scrollContentBackground(.hidden)
+                        .frame(height: 175)
+                }
+                HStack {
+                    Text("Be kind and keep it relevant to your community.")
+                        .font(.system(size: 11))
+                        .foregroundStyle(PostComposerStyle.muted)
+                    Spacer(minLength: 8)
+                    Text("\(text.count)/2000")
+                        .font(.system(size: 11, weight: .medium, design: .monospaced))
+                        .foregroundStyle(text.count > 2000 ? .red : PostComposerStyle.muted)
+                }
+            }
+            .padding(16)
+            .background(.white, in: RoundedRectangle(cornerRadius: 20))
+            .overlay { RoundedRectangle(cornerRadius: 20).stroke(PostComposerStyle.border, lineWidth: 1) }
+        }
+    }
+
+    private var privacySection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            sectionHeading("PRIVACY", subtitle: "Control what neighbours see")
+            VStack(spacing: 0) {
+                privacyRow(icon: "person.crop.circle", title: "Show my name",
+                           subtitle: "Display your name alongside this post", isOn: $showAuthorName)
+                Divider().padding(.leading, 54)
+                privacyRow(icon: "house", title: "Show my apartment/unit",
+                           subtitle: "Only available if enabled in your profile", isOn: $showAuthorUnit,
+                           enabled: showAuthorName && store.currentResident.showUnitToNeighbors)
+            }
+            .padding(.horizontal, 16)
+            .background(.white, in: RoundedRectangle(cornerRadius: 20))
+            .overlay { RoundedRectangle(cornerRadius: 20).stroke(PostComposerStyle.border, lineWidth: 1) }
+            if !showAuthorName {
+                Label("Your post will appear as Anonymous User.", systemImage: "eye.slash")
+                    .font(.system(size: 12))
+                    .foregroundStyle(PostComposerStyle.muted)
+            }
+        }
+    }
+
+    private var photoInformation: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "photo.on.rectangle.angled")
+                .font(.system(size: 20))
+                .foregroundStyle(PostComposerStyle.purple)
+                .frame(width: 42, height: 42)
+                .background(PostComposerStyle.purple.opacity(0.10), in: RoundedRectangle(cornerRadius: 12))
+            VStack(alignment: .leading, spacing: 3) {
+                Text("Photo attachments")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(PostComposerStyle.navy)
+                Text("Not yet supported for community posts")
+                    .font(.system(size: 12))
+                    .foregroundStyle(PostComposerStyle.muted)
+            }
+            Spacer()
+        }
+        .padding(15)
+        .background(.white, in: RoundedRectangle(cornerRadius: 18))
+        .overlay { RoundedRectangle(cornerRadius: 18).stroke(PostComposerStyle.border, lineWidth: 1) }
+    }
+
+    private var publishFooter: some View {
+        Button(action: publish) {
+            HStack(spacing: 9) {
+                if isSaving { ProgressView().tint(.white) }
+                else { Image(systemName: "paperplane.fill") }
+                Text(isSaving ? "Publishing…" : "Publish post")
+            }
+            .font(.system(size: 16, weight: .bold))
+            .foregroundStyle(.white)
+            .frame(maxWidth: .infinity)
+            .frame(height: 54)
+            .background(canPublish ? PostComposerStyle.purple : PostComposerStyle.muted.opacity(0.45),
+                        in: RoundedRectangle(cornerRadius: 18))
+        }
+        .disabled(!canPublish)
+        .padding(.horizontal, 22)
+        .padding(.top, 12)
+        .padding(.bottom, 10)
+        .background(.regularMaterial)
+    }
+
+    private func sectionHeading(_ title: String, subtitle: String) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title)
+                .font(.system(size: 11, weight: .bold, design: .rounded))
+                .tracking(1.2)
+                .foregroundStyle(PostComposerStyle.purple)
+            Text(subtitle)
+                .font(.system(size: 13))
+                .foregroundStyle(PostComposerStyle.muted)
+        }
+    }
+
+    private func privacyRow(icon: String, title: String, subtitle: String,
+                            isOn: Binding<Bool>, enabled: Bool = true) -> some View {
+        Toggle(isOn: isOn) {
+            HStack(spacing: 12) {
+                Image(systemName: icon)
+                    .font(.system(size: 18))
+                    .foregroundStyle(PostComposerStyle.purple)
+                    .frame(width: 28)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(title)
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(PostComposerStyle.navy)
+                    Text(subtitle)
+                        .font(.system(size: 11))
+                        .foregroundStyle(PostComposerStyle.muted)
+                }
+            }
+        }
+        .tint(PostComposerStyle.purple)
+        .disabled(!enabled)
+        .padding(.vertical, 15)
+    }
+
+    private func publish() {
+        guard canPublish else { return }
+        isSaving = true
+        postError = ""
+        Task {
+            do {
+                try await store.saveResidentPostToFirestore(
+                    text: text,
+                    category: category,
+                    showAuthorName: showAuthorName,
+                    showAuthorUnit: showAuthorName && showAuthorUnit && store.currentResident.showUnitToNeighbors
+                )
+                store.addPost(text: text, category: category, hasPhoto: false)
+                isSaving = false
+                dismiss()
+            } catch {
+                postError = error.localizedDescription
+                isSaving = false
             }
         }
     }
@@ -232,4 +277,3 @@ struct NewPostView: View {
 #Preview {
     NewPostView().environmentObject(AppStore())
 }
-

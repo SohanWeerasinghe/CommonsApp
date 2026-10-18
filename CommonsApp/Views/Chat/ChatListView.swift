@@ -4,103 +4,191 @@
 //
 //  Created by Sohan Weerasinghe on 21/9/2026.
 //
-
 import SwiftUI
 import FirebaseAuth
 import FirebaseFirestore
-
 struct ChatListView: View {
     @EnvironmentObject var store: AppStore
     @State private var searchText = ""
     @State private var showingNewChat = false
 
-    var body: some View {
-        ZStack {
-            LinearGradient(colors: [Theme.wallBackgroundTop, Theme.wallBackgroundBottom], startPoint: .top, endPoint: .bottom)
-                .ignoresSafeArea()
-
-            ScrollView {
-                VStack(alignment: .leading, spacing: 0) {
-                    HStack {
-                        ChatHeader()
-                        Spacer()
-                        Button { showingNewChat = true } label: {
-                            Image(systemName: "plus")
-                                .font(.system(size: 19, weight: .semibold))
-                                .foregroundStyle(.white)
-                                .frame(width: 46, height: 46)
-                                .background(Theme.appPurple)
-                                .clipShape(Circle())
-                        }
-                        .accessibilityLabel("New Chat")
-                    }
-
-                    HStack(spacing: 10) {
-                        Image(systemName: "magnifyingglass")
-                            .font(.system(size: 15, weight: .medium))
-                            .foregroundStyle(Theme.appMuted)
-                        TextField("Search messages...", text: $searchText)
-                            .font(Theme.ui(14))
-                            .foregroundStyle(Theme.appNavy)
-                    }
-                    .padding(.horizontal, 16)
-                    .frame(height: 48)
-                    .background(Theme.card)
-                    .clipShape(RoundedRectangle(cornerRadius: 16))
-                    .overlay { RoundedRectangle(cornerRadius: 16).stroke(Theme.appBorder, lineWidth: 1) }
-                    .padding(.top, 20)
-
-                    let visibleThreads = filteredThreads()
-                    if store.chatThreads.isEmpty {
-                        AppEmptyState(icon: "bubble.left.and.bubble.right", title: "No messages yet", message: "Tap + to find a neighbour and start a chat.")
-                            .padding(.top, 60)
-                    } else {
-                        ResidentShortcuts(threads: store.chatThreads)
-                            .padding(.top, 18)
-                        Text("MESSAGES")
-                            .font(Theme.ui(10, weight: .bold))
-                            .foregroundStyle(Theme.appMuted)
-                            .padding(.top, 26)
-                            .padding(.bottom, 10)
-                        if visibleThreads.isEmpty {
-                            Text("No conversations found")
-                                .font(Theme.ui(14))
-                                .foregroundStyle(Theme.appMuted)
-                                .frame(maxWidth: .infinity)
-                                .padding(.top, 40)
-                        } else {
-                            VStack(spacing: 10) {
-                                ForEach(visibleThreads) { thread in
-                                    NavigationLink { ChatDetailView(thread: thread) } label: {
-                                        ThreadRow(thread: thread)
-                                    }
-                                    .buttonStyle(.plain)
-                                }
-                            }
-                        }
-                    }
-                }
-                .padding(.horizontal, 16)
-                .padding(.top, 4)
-                .padding(.bottom, 125)
-            }
-            .scrollIndicators(.hidden)
-        }
-        .toolbar(.hidden, for: .navigationBar)
-        .onAppear { store.startChatThreadsListener() }
-        .sheet(isPresented: $showingNewChat) {
-            NewChatSheet()
-                .environmentObject(store)
-        }
-    }
-
-    private func filteredThreads() -> [ChatThread] {
+    private var filteredThreads: [ChatThread] {
         guard !searchText.isEmpty else { return store.chatThreads }
         return store.chatThreads.filter { thread in
             thread.neighborName.localizedCaseInsensitiveContains(searchText)
             || thread.neighborUnit.localizedCaseInsensitiveContains(searchText)
             || (thread.lastMessage?.text.localizedCaseInsensitiveContains(searchText) ?? false)
         }
+    }
+
+    var body: some View {
+        ZStack {
+            LinearGradient(colors: [Theme.wallBackgroundTop, Theme.wallBackgroundBottom],
+                           startPoint: .top, endPoint: .bottom)
+                .ignoresSafeArea()
+            ScrollView {
+                VStack(alignment: .leading, spacing: 22) {
+                    header
+                    introduction
+                    searchBar
+                    if store.chatThreads.isEmpty {
+                        emptyState
+                    } else {
+                        if searchText.isEmpty {
+                            VStack(alignment: .leading, spacing: 12) {
+                                sectionHeader("NEIGHBOURS", detail: "Quick access")
+                                ResidentShortcuts(threads: store.chatThreads)
+                            }
+                        }
+                        VStack(alignment: .leading, spacing: 12) {
+                            sectionHeader("CONVERSATIONS", detail: "\(filteredThreads.count) chats")
+                            if filteredThreads.isEmpty {
+                                Text("No conversations match your search.")
+                                    .font(Theme.ui(14))
+                                    .foregroundStyle(Theme.appMuted)
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 32)
+                            } else {
+                                LazyVStack(spacing: 12) {
+                                    ForEach(filteredThreads) { thread in
+                                        NavigationLink {
+                                            ChatDetailView(thread: thread)
+                                        } label: {
+                                            ThreadRow(thread: thread)
+                                        }
+                                        .buttonStyle(.plain)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                .padding(.horizontal, 20)
+                .padding(.top, 12)
+                .padding(.bottom, 135)
+            }
+            .scrollIndicators(.hidden)
+        }
+        .toolbar(.hidden, for: .navigationBar)
+        .onAppear { store.startChatThreadsListener() }
+        .sheet(isPresented: $showingNewChat) {
+            NewChatSheet().environmentObject(store)
+        }
+    }
+
+    private var header: some View {
+        HStack(alignment: .center, spacing: 14) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("YOUR COMMUNITY")
+                    .font(Theme.ui(10, weight: .bold))
+                    .tracking(1.6)
+                    .foregroundStyle(Theme.appPurple)
+                Text("Messages")
+                    .font(Theme.display(31, weight: .bold))
+                    .foregroundStyle(Theme.appNavy)
+            }
+            Spacer()
+            Button { showingNewChat = true } label: {
+                Image(systemName: "square.and.pencil")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(width: 52, height: 52)
+                    .background(Theme.appPurple, in: RoundedRectangle(cornerRadius: 18))
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("New Chat")
+        }
+    }
+
+    private var introduction: some View {
+        HStack(spacing: 15) {
+            Image(systemName: "bubble.left.and.bubble.right.fill")
+                .font(.system(size: 25, weight: .medium))
+                .foregroundStyle(Theme.appPurple)
+                .frame(width: 54, height: 54)
+                .background(Theme.appPurple.opacity(0.12), in: RoundedRectangle(cornerRadius: 17))
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Better together")
+                    .font(Theme.ui(16, weight: .bold))
+                    .foregroundStyle(Theme.appNavy)
+                Text("Stay connected with your neighbours.")
+                    .font(Theme.ui(12))
+                    .foregroundStyle(Theme.appMuted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(16)
+        .background(Theme.card, in: RoundedRectangle(cornerRadius: 22))
+        .overlay(RoundedRectangle(cornerRadius: 22).stroke(Theme.appBorder, lineWidth: 1))
+    }
+
+    private var searchBar: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 17, weight: .medium))
+                .foregroundStyle(Theme.appPurple)
+            TextField("Search conversations", text: $searchText)
+                .font(Theme.ui(14))
+                .foregroundStyle(Theme.appNavy)
+                .tint(Theme.appPurple)
+                .autocorrectionDisabled()
+            if !searchText.isEmpty {
+                Button { searchText = "" } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(Theme.appMuted)
+                }
+                .accessibilityLabel("Clear search")
+            }
+        }
+        .padding(.horizontal, 16)
+        .frame(height: 54)
+        .background(Theme.card, in: RoundedRectangle(cornerRadius: 18))
+        .overlay(RoundedRectangle(cornerRadius: 18).stroke(Theme.appBorder, lineWidth: 1))
+    }
+
+    private func sectionHeader(_ title: String, detail: String) -> some View {
+        HStack {
+            Text(title)
+                .font(Theme.ui(11, weight: .bold))
+                .tracking(1.2)
+                .foregroundStyle(Theme.appNavy)
+            Spacer()
+            Text(detail)
+                .font(Theme.ui(11, weight: .medium))
+                .foregroundStyle(Theme.appMuted)
+        }
+    }
+
+    private var emptyState: some View {
+        VStack(spacing: 13) {
+            Image(systemName: "bubble.left.and.bubble.right")
+                .font(.system(size: 34, weight: .light))
+                .foregroundStyle(Theme.appPurple)
+                .frame(width: 86, height: 86)
+                .background(Theme.appPurple.opacity(0.10), in: RoundedRectangle(cornerRadius: 28))
+            Text("Your conversations start here")
+                .font(Theme.ui(17, weight: .bold))
+                .foregroundStyle(Theme.appNavy)
+            Text("Find a neighbour and say hello.")
+                .font(Theme.ui(13))
+                .foregroundStyle(Theme.appMuted)
+            Button { showingNewChat = true } label: {
+                Label("Start a conversation", systemImage: "plus")
+                    .font(Theme.ui(13, weight: .bold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 20)
+                    .frame(height: 44)
+                    .background(Theme.appPurple, in: Capsule())
+            }
+            .buttonStyle(.plain)
+            .padding(.top, 4)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 38)
+        .padding(.horizontal, 16)
+        .background(Theme.card, in: RoundedRectangle(cornerRadius: 24))
+        .overlay(RoundedRectangle(cornerRadius: 24).stroke(Theme.appBorder, lineWidth: 1))
     }
 }
 
@@ -109,7 +197,6 @@ private struct DirectoryResident: Identifiable {
     let name: String
     let unit: String
 }
-
 private struct NewChatSheet: View {
     @EnvironmentObject private var store: AppStore
     @Environment(\.dismiss) private var dismiss
@@ -119,7 +206,6 @@ private struct NewChatSheet: View {
     @State private var startingUID: String?
     @State private var errorMessage: String?
     @State private var selectedThread: ChatThread?
-
     private var filteredResidents: [DirectoryResident] {
         guard !searchText.isEmpty else { return residents }
         return residents.filter {
@@ -127,7 +213,6 @@ private struct NewChatSheet: View {
             || $0.unit.localizedCaseInsensitiveContains(searchText)
         }
     }
-
     var body: some View {
         NavigationStack {
             ZStack {
@@ -144,7 +229,6 @@ private struct NewChatSheet: View {
                                 .foregroundStyle(Theme.appMuted)
                         }
                         .padding(.top, 12)
-
                         HStack(spacing: 10) {
                             Image(systemName: "magnifyingglass")
                                 .foregroundStyle(Theme.appMuted)
@@ -157,7 +241,6 @@ private struct NewChatSheet: View {
                         .background(Theme.card)
                         .clipShape(RoundedRectangle(cornerRadius: 16))
                         .overlay { RoundedRectangle(cornerRadius: 16).stroke(Theme.appBorder, lineWidth: 1) }
-
                         if loading {
                             ProgressView("Loading residents...")
                                 .frame(maxWidth: .infinity)
@@ -233,7 +316,6 @@ private struct NewChatSheet: View {
             }
         }
     }
-
     @MainActor
     private func loadResidents() async {
         loading = true
@@ -251,7 +333,6 @@ private struct NewChatSheet: View {
             errorMessage = error.localizedDescription
         }
     }
-
     @MainActor
     private func startChat(with resident: DirectoryResident) async {
         startingUID = resident.id
@@ -271,7 +352,6 @@ private struct NewChatSheet: View {
         }
     }
 }
-
 private struct ChatHeader: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -284,24 +364,36 @@ private struct ChatHeader: View {
         }
     }
 }
-
 private struct ResidentShortcuts: View {
     let threads: [ChatThread]
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 14) {
-                ForEach(threads.prefix(5)) { thread in
+            HStack(spacing: 12) {
+                ForEach(threads.prefix(8)) { thread in
                     NavigationLink { ChatDetailView(thread: thread) } label: {
-                        VStack(spacing: 6) {
-                            ChatResidentAvatar(name: thread.neighborName, unit: thread.neighborUnit, size: 48)
-                            Text(thread.neighborUnit.isEmpty ? thread.neighborName : thread.neighborUnit)
-                                .font(Theme.ui(10, weight: .semibold))
-                                .foregroundStyle(Theme.appMuted)
+                        VStack(spacing: 9) {
+                            ChatResidentAvatar(name: thread.neighborName,
+                                               unit: thread.neighborUnit, size: 58)
+                            Text(thread.neighborName)
+                                .font(Theme.ui(11, weight: .semibold))
+                                .foregroundStyle(Theme.appNavy)
+                                .lineLimit(1)
+                                .frame(width: 78)
+                            if !thread.neighborUnit.isEmpty {
+                                Text(thread.neighborUnit)
+                                    .font(Theme.ui(10))
+                                    .foregroundStyle(Theme.appMuted)
+                                    .lineLimit(1)
+                            }
                         }
+                        .frame(width: 92, height: 123)
+                        .background(Theme.card, in: RoundedRectangle(cornerRadius: 20))
+                        .overlay(RoundedRectangle(cornerRadius: 20).stroke(Theme.appBorder, lineWidth: 1))
                     }
                     .buttonStyle(.plain)
                 }
             }
+            .padding(.vertical, 2)
         }
     }
 }
@@ -309,47 +401,41 @@ private struct ResidentShortcuts: View {
 private struct ThreadRow: View {
     let thread: ChatThread
     var body: some View {
-        HStack(spacing: 12) {
-            ChatResidentAvatar(name: thread.neighborName, unit: thread.neighborUnit, size: 48)
-            VStack(alignment: .leading, spacing: 4) {
-                HStack {
+        HStack(spacing: 13) {
+            ChatResidentAvatar(name: thread.neighborName, unit: thread.neighborUnit, size: 56)
+            VStack(alignment: .leading, spacing: 7) {
+                HStack(spacing: 8) {
                     Text(thread.neighborName)
-                        .font(Theme.ui(14, weight: .bold))
+                        .font(Theme.ui(15, weight: .bold))
                         .foregroundStyle(Theme.appNavy)
                         .lineLimit(1)
-                    Spacer()
-                    if let lastMessage = thread.lastMessage {
-                        Text(lastMessage.timestamp.chatRelativeDescription)
-                            .font(Theme.ui(9))
+                    Spacer(minLength: 2)
+                    if let last = thread.lastMessage {
+                        Text(last.timestamp.chatRelativeDescription)
+                            .font(Theme.ui(10))
                             .foregroundStyle(Theme.appMuted)
                     }
                 }
-                if let note = thread.contextNote {
+                if let note = thread.contextNote, !note.isEmpty {
                     Text(note)
-                        .font(Theme.ui(10, weight: .semibold))
+                        .font(Theme.ui(11, weight: .semibold))
                         .foregroundStyle(Theme.appPurple)
                         .lineLimit(1)
                 }
-                if let lastMessage = thread.lastMessage {
-                    Text(lastMessage.text)
-                        .font(Theme.ui(12))
-                        .foregroundStyle(Theme.appMuted)
-                        .lineLimit(1)
-                } else {
-                    Text("Start a conversation")
-                        .font(Theme.ui(12))
-                        .foregroundStyle(Theme.appMuted)
-                }
+                Text(thread.lastMessage?.text ?? "Tap to start a conversation")
+                    .font(Theme.ui(12))
+                    .foregroundStyle(Theme.appMuted)
+                    .lineLimit(2)
             }
             Image(systemName: "chevron.right")
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(Theme.appTertiary)
+                .font(.system(size: 11, weight: .bold))
+                .foregroundStyle(Theme.appPurple)
+                .padding(.leading, 3)
         }
-        .padding(14)
-        .frame(maxWidth: .infinity)
-        .background(Theme.card.opacity(0.9))
-        .clipShape(RoundedRectangle(cornerRadius: 18))
-        .overlay { RoundedRectangle(cornerRadius: 18).stroke(Theme.appBorder, lineWidth: 1) }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Theme.card, in: RoundedRectangle(cornerRadius: 22))
+        .overlay(RoundedRectangle(cornerRadius: 22).stroke(Theme.appBorder, lineWidth: 1))
     }
 }
 
@@ -358,14 +444,11 @@ private struct ThreadRow: View {
         ChatListView().environmentObject(AppStore())
     }
 }
-
-
 // Chat-specific avatar: retain the original unit badge where a unit is visible.
 struct ChatResidentAvatar: View {
     let name: String
     let unit: String
     let size: CGFloat
-
     var body: some View {
         Group {
             if unit.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -381,15 +464,14 @@ struct ChatResidentAvatar: View {
         }
     }
 }
-
 extension Date {
     var chatRelativeDescription: String {
         let seconds = max(0, Date().timeIntervalSince(self))
         if seconds < 60 { return "Just now" }
-        if seconds < 3600 { return "\(Int(seconds / 60))m ago" }
+        if seconds < 3600 { return "\\(Int(seconds / 60))m ago" }
         if Calendar.current.isDateInYesterday(self) { return "Yesterday" }
-        if seconds < 86400 { return "\(Int(seconds / 3600))h ago" }
-        if seconds < 604800 { return "\(Int(seconds / 86400))d ago" }
+        if seconds < 86400 { return "\\(Int(seconds / 3600))h ago" }
+        if seconds < 604800 { return "\\(Int(seconds / 86400))d ago" }
         return formatted(date: .abbreviated, time: .omitted)
     }
 }

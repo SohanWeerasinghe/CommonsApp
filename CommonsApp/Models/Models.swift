@@ -62,16 +62,39 @@ struct Post: Identifiable, Codable, Equatable {
 
 struct SharedItem: Identifiable, Codable, Equatable {
     var id = UUID()
-    var name : String
+    var name: String
     var detail: String
     var ownerName: String
     var ownerUnit: String
     var status: Status
     var ownerUID: String? = nil
-
+    var availability: String = "Available now"
+    var firestoreId: String? = nil
     enum Status: String, Codable {
         case lending = "Lending"
-        case needed  = "Needed"
+        case needed = "Needed"
+    }
+}
+
+struct BorrowRequest: Identifiable, Equatable {
+    var id: String
+    var itemId: String
+    var itemName: String
+    var ownerUID: String
+    var borrowerUID: String
+    var requesterName: String
+    var startDate: Date
+    var endDate: Date
+    var note: String
+    var status: Status
+    var createdAt: Date
+    // Backwards-compatible: old borrowing documents omit listingStatus.
+    var listingStatus: String = "Lending"
+    var isNeededOffer: Bool { listingStatus == "Needed" }
+    enum Status: String {
+        case pending, approved, collected, returned, declined, cancelled
+        var label: String { rawValue.capitalized }
+        var isHistory: Bool { [.returned, .declined, .cancelled].contains(self) }
     }
 }
 

@@ -1,335 +1,307 @@
-//
-//  EventCalendarView.swift
-//  CommonsApp
-//
-//  Created by Sohan Weerasinghe on 21/9/2026.
-//
-
-
 import SwiftUI
 
-struct EventCalendarView: View {
+private enum EventStyle {
+    static let purple = Color(red: 0.46, green: 0.40, blue: 0.96)
+    static let navy = Color(red: 0.12, green: 0.17, blue: 0.28)
+    static let muted = Color(red: 0.47, green: 0.51, blue: 0.60)
+    static let bg = Color(red: 0.965, green: 0.965, blue: 0.985)
+    static let lavender = Color(red: 0.93, green: 0.91, blue: 1.0)
+}
 
-    @EnvironmentObject var store: AppStore
+struct EventCalendarView: View {
+    @EnvironmentObject private var store: AppStore
+    @State private var displayedMonth = Calendar.current.startOfDay(for: Date())
+    @State private var selectedDate = Calendar.current.startOfDay(for: Date())
+    private let calendar = Calendar.current
+
+    private var selectedEvents: [BuildingEvent] {
+        store.events.filter { calendar.isDate($0.date, inSameDayAs: selectedDate) }
+            .sorted { $0.date < $1.date }
+    }
+    private var upcomingEvents: [BuildingEvent] {
+        store.events.filter { $0.date >= calendar.startOfDay(for: Date()) }
+            .sorted { $0.date < $1.date }
+    }
 
     var body: some View {
         ZStack {
-            LinearGradient(
-                colors: [Theme.wallBackgroundTop, Theme.wallBackgroundBottom],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            .ignoresSafeArea()
-
+            EventStyle.bg.ignoresSafeArea()
             ScrollView {
-                VStack(alignment: .leading, spacing: 0) {
-
-                    // Header
-                    EventsHeader()
-
-                    // Calendar
-                    EventMonthCalendar()
-                        .padding(.top, 20)
-
-                    // Upcoming section
-                    Text("UPCOMING")
-                        .font(Theme.ui(10, weight: .bold))
-                        .foregroundStyle(Theme.appMuted)
-                        .padding(.top, 28)
-                        .padding(.bottom, 12)
-
-                    if store.events.isEmpty {
-                        AppEmptyState(
-                            icon: "calendar",
-                            title: "No upcoming events",
-                            message: "Check back soon for building events and socials."
-                        )
-                        .padding(.top, 30)
-                    } else {
-                        VStack(spacing: 12) {
-                            ForEach(store.events) { event in
-                                NavigationLink {
-                                    EventDetailView(event: event)
-                                } label: {
-                                    UpcomingEventCard(event: event)
-                                }
-                                .buttonStyle(.plain)
-                            }
-                        }
-                    }
+                VStack(alignment: .leading, spacing: 24) {
+                    header
+                    introduction
+                    calendarCard
+                    daySection
+                    upcomingSection
                 }
-                .padding(.horizontal, 16)
-                .padding(.top, 4)
-                .padding(.bottom, 125)
+                .padding(.horizontal, 20)
+                .padding(.top, 16)
+                .padding(.bottom, 130)
             }
             .scrollIndicators(.hidden)
         }
         .toolbar(.hidden, for: .navigationBar)
+        .preferredColorScheme(.light)
     }
-}
 
-private struct EventsHeader: View {
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text("EVENTS")
-                .font(Theme.ui(10, weight: .bold))
-                .foregroundStyle(Theme.appMuted)
-
-            HStack {
-                Text("24 Ashcroft Lane")
-                    .font(Theme.display(28, weight: .bold))
-                    .foregroundStyle(Theme.appNavy)
-
-                Spacer()
-
-                Button {
-                    // Add Event screen can be connected later.
-                } label: {
-                    HStack(spacing: 5) {
-                        Image(systemName: "plus")
-                            .font(.system(size: 12, weight: .bold))
-
-                        Text("Add Event")
-                            .font(Theme.ui(11, weight: .bold))
-                    }
-                    .foregroundStyle(Theme.appPurple)
-                    .padding(.horizontal, 14)
-                    .frame(height: 36)
-                    .background(Theme.appPurpleSoft)
-                    .clipShape(Capsule())
-                }
-                .buttonStyle(.plain)
+    private var header: some View {
+        HStack(alignment: .center) {
+            VStack(alignment: .leading, spacing: 7) {
+                Text("24 ASHCROFT LANE")
+                    .font(.system(size: 11, weight: .bold, design: .rounded))
+                    .tracking(1.5).foregroundStyle(EventStyle.muted)
+                Text("Community events")
+                    .font(.system(size: 29, weight: .bold, design: .rounded))
+                    .foregroundStyle(EventStyle.navy)
             }
+            Spacer(minLength: 6)
+            Image(systemName: "calendar.badge.clock")
+                .font(.system(size: 21, weight: .semibold))
+                .foregroundStyle(EventStyle.purple)
+                .frame(width: 52, height: 52)
+                .background(EventStyle.lavender, in: RoundedRectangle(cornerRadius: 17))
+                .accessibilityLabel("Community calendar")
         }
     }
-}
 
-private struct EventMonthCalendar: View {
+    private var introduction: some View {
+        HStack(spacing: 14) {
+            Image(systemName: "sparkles")
+                .font(.system(size: 22, weight: .semibold))
+                .foregroundStyle(EventStyle.purple)
+                .frame(width: 48, height: 48)
+                .background(.white.opacity(0.75), in: RoundedRectangle(cornerRadius: 15))
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Good things happen together")
+                    .font(.system(size: 15, weight: .bold, design: .rounded))
+                    .foregroundStyle(EventStyle.navy)
+                Text("Discover what's happening in your building.")
+                    .font(.system(size: 12))
+                    .foregroundStyle(EventStyle.muted)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(16)
+        .background(EventStyle.lavender.opacity(0.75), in: RoundedRectangle(cornerRadius: 22))
+    }
 
-    private let calendar = Calendar.current
-    private let displayDate = Date()
-
-    private let weekdayNames = [
-        "S", "M", "T", "W", "T", "F", "S"
-    ]
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-
-            Text(monthYearText())
-                .font(Theme.display(18, weight: .bold))
-                .foregroundStyle(Theme.appNavy)
-
+    private var calendarCard: some View {
+        VStack(spacing: 20) {
+            HStack {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("EXPLORE DATES")
+                        .font(.system(size: 10, weight: .bold)).tracking(1.4)
+                        .foregroundStyle(EventStyle.muted)
+                    Text(displayedMonth.formatted(.dateTime.month(.wide).year()))
+                        .font(.system(size: 21, weight: .bold, design: .rounded))
+                        .foregroundStyle(EventStyle.navy)
+                }
+                Spacer()
+                monthButton("chevron.left", offset: -1)
+                monthButton("chevron.right", offset: 1)
+            }
             HStack(spacing: 0) {
-                ForEach(weekdayNames, id: \.self) { day in
-                    Text(day)
-                        .font(Theme.ui(10, weight: .bold))
-                        .foregroundStyle(Theme.appMuted)
+                ForEach(0..<7, id: \.self) { index in
+                    Text(["S", "M", "T", "W", "T", "F", "S"][index])
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(EventStyle.muted)
                         .frame(maxWidth: .infinity)
                 }
             }
-
-            let days = calendarCells()
-
-            LazyVGrid(
-                columns: Array(repeating: GridItem(.flexible()), count: 7),
-                spacing: 10
-            ) {
-                ForEach(0..<days.count, id: \.self) { index in
-                    if let day = days[index] {
-                        CalendarDay(day: day, isSelected: isToday(day))
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 3), count: 7), spacing: 8) {
+                ForEach(Array(monthCells.enumerated()), id: \.offset) { _, date in
+                    if let date {
+                        dayButton(date)
                     } else {
-                        Color.clear
-                            .frame(height: 34)
+                        Color.clear.frame(height: 47)
                     }
                 }
             }
+            HStack(spacing: 7) {
+                Circle().fill(EventStyle.purple).frame(width: 7, height: 7)
+                Text("Event scheduled")
+                Spacer()
+                Button("Today") {
+                    let today = calendar.startOfDay(for: Date())
+                    displayedMonth = today
+                    selectedDate = today
+                }
+                .fontWeight(.semibold)
+                .foregroundStyle(EventStyle.purple)
+            }
+            .font(.system(size: 11))
+            .foregroundStyle(EventStyle.muted)
         }
-        .padding(18)
-        .background(Theme.card.opacity(0.9))
-        .clipShape(RoundedRectangle(cornerRadius: 22))
-        .overlay {
-            RoundedRectangle(cornerRadius: 22)
-                .stroke(Theme.appBorder, lineWidth: 1)
-        }
+        .padding(19)
+        .background(.white, in: RoundedRectangle(cornerRadius: 26))
+        .overlay(RoundedRectangle(cornerRadius: 26).stroke(EventStyle.navy.opacity(0.07)))
     }
 
-    func monthYearText() -> String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "MMMM yyyy"
-        return formatter.string(from: displayDate)
+    private func monthButton(_ icon: String, offset: Int) -> some View {
+        Button {
+            guard let newMonth = calendar.date(byAdding: .month, value: offset, to: displayedMonth) else { return }
+            displayedMonth = newMonth
+        } label: {
+            Image(systemName: icon)
+                .font(.system(size: 12, weight: .bold))
+                .foregroundStyle(EventStyle.navy)
+                .frame(width: 34, height: 34)
+                .background(EventStyle.bg, in: RoundedRectangle(cornerRadius: 11))
+        }
+        .buttonStyle(.plain)
     }
 
-    func calendarCells() -> [Int?] {
-        var cells: [Int?] = []
+    private var monthCells: [Date?] {
+        let parts = calendar.dateComponents([.year, .month], from: displayedMonth)
+        guard let first = calendar.date(from: parts),
+              let days = calendar.range(of: .day, in: .month, for: first) else { return [] }
+        let offset = (calendar.component(.weekday, from: first) - calendar.firstWeekday + 7) % 7
+        let leading = Array<Date?>(repeating: nil, count: offset)
+        let dates = days.compactMap { calendar.date(byAdding: .day, value: $0 - 1, to: first) }
+        return leading + dates.map { Optional($0) }
+    }
 
-        let components = calendar.dateComponents([.year, .month], from: displayDate)
-
-        guard let firstDay = calendar.date(from: components) else {
-            return cells
+    private func dayButton(_ date: Date) -> some View {
+        let selected = calendar.isDate(date, inSameDayAs: selectedDate)
+        let hasEvent = store.events.contains { calendar.isDate($0.date, inSameDayAs: date) }
+        let today = calendar.isDateInToday(date)
+        return Button { selectedDate = date } label: {
+            VStack(spacing: 4) {
+                Text("\(calendar.component(.day, from: date))")
+                    .font(.system(size: 13, weight: selected || today ? .bold : .medium))
+                Circle().fill(selected ? Color.white : EventStyle.purple)
+                    .frame(width: 5, height: 5)
+                    .opacity(hasEvent ? 1 : 0)
+            }
+            .foregroundStyle(selected ? .white : EventStyle.navy)
+            .frame(maxWidth: .infinity)
+            .frame(height: 47)
+            .background(selected ? EventStyle.purple : (today ? EventStyle.lavender : Color.clear),
+                        in: RoundedRectangle(cornerRadius: 13))
         }
+        .buttonStyle(.plain)
+    }
 
-        let weekday = calendar.component(.weekday, from: firstDay)
-        let emptyCells = weekday - 1
-
-        if emptyCells > 0 {
-            for _ in 0..<emptyCells {
-                cells.append(nil)
+    private var daySection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("SELECTED DAY")
+                        .font(.system(size: 10, weight: .bold)).tracking(1.3)
+                        .foregroundStyle(EventStyle.muted)
+                    Text(selectedDate.formatted(.dateTime.weekday(.wide).month(.abbreviated).day()))
+                        .font(.system(size: 20, weight: .bold, design: .rounded))
+                        .foregroundStyle(EventStyle.navy)
+                }
+                Spacer()
+                Text("\(selectedEvents.count) event\(selectedEvents.count == 1 ? "" : "s")")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(EventStyle.purple)
+                    .padding(.horizontal, 12).padding(.vertical, 8)
+                    .background(EventStyle.lavender, in: Capsule())
+            }
+            if selectedEvents.isEmpty {
+                HStack(spacing: 12) {
+                    Image(systemName: "calendar")
+                        .font(.title3).foregroundStyle(EventStyle.purple)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Nothing planned for this day")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(EventStyle.navy)
+                        Text("Select another date or browse upcoming events.")
+                            .font(.system(size: 12)).foregroundStyle(EventStyle.muted)
+                    }
+                    Spacer(minLength: 0)
+                }
+                .padding(18)
+                .background(.white, in: RoundedRectangle(cornerRadius: 20))
+            } else {
+                ForEach(selectedEvents) { event in
+                    NavigationLink { EventDetailView(event: event) } label: {
+                        EventRedesignedCard(event: event)
+                    }.buttonStyle(.plain)
+                }
             }
         }
-
-        guard let range = calendar.range(of: .day, in: .month, for: displayDate) else {
-            return cells
-        }
-
-        for day in range {
-            cells.append(day)
-        }
-
-        return cells
     }
 
-    func isToday(_ day: Int) -> Bool {
-        let today = Date()
-
-        let currentYear = calendar.component(.year, from: today)
-        let currentMonth = calendar.component(.month, from: today)
-        let currentDay = calendar.component(.day, from: today)
-
-        let displayYear = calendar.component(.year, from: displayDate)
-        let displayMonth = calendar.component(.month, from: displayDate)
-
-        if currentYear == displayYear &&
-            currentMonth == displayMonth &&
-            currentDay == day {
-            return true
+    private var upcomingSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text("Coming up")
+                    .font(.system(size: 21, weight: .bold, design: .rounded))
+                    .foregroundStyle(EventStyle.navy)
+                Spacer()
+                Text("\(upcomingEvents.count) total")
+                    .font(.system(size: 12)).foregroundStyle(EventStyle.muted)
+            }
+            if upcomingEvents.isEmpty {
+                Text("No upcoming events yet.")
+                    .font(.subheadline).foregroundStyle(EventStyle.muted)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(20)
+                    .background(.white, in: RoundedRectangle(cornerRadius: 20))
+            } else {
+                ForEach(upcomingEvents) { event in
+                    NavigationLink { EventDetailView(event: event) } label: {
+                        EventRedesignedCard(event: event)
+                    }.buttonStyle(.plain)
+                }
+            }
         }
-
-        return false
     }
 }
 
-private struct CalendarDay: View {
-
-    let day: Int
-    let isSelected: Bool
-
-    var body: some View {
-        Text("\(day)")
-            .font(Theme.ui(12, weight: isSelected ? .bold : .regular))
-            .foregroundStyle(isSelected ? .white : Theme.appNavy)
-            .frame(width: 34, height: 34)
-            .background(isSelected ? Theme.appPurple : Color.clear)
-            .clipShape(Circle())
-    }
-}
-
-private struct UpcomingEventCard: View {
-
-    @EnvironmentObject var store: AppStore
-
+private struct EventRedesignedCard: View {
+    @EnvironmentObject private var store: AppStore
     let event: BuildingEvent
 
     var body: some View {
-        HStack(spacing: 14) {
-
-            // Date block
+        HStack(spacing: 13) {
             VStack(spacing: 2) {
-                Text(monthText())
-                    .font(Theme.ui(9, weight: .bold))
-                    .foregroundStyle(Theme.appPurple)
-
-                Text(dayText())
-                    .font(Theme.display(22, weight: .bold))
-                    .foregroundStyle(Theme.appNavy)
+                Text(event.date.formatted(.dateTime.month(.abbreviated)).uppercased())
+                    .font(.system(size: 10, weight: .bold)).foregroundStyle(EventStyle.purple)
+                Text(event.date.formatted(.dateTime.day()))
+                    .font(.system(size: 25, weight: .bold, design: .rounded))
+                    .foregroundStyle(EventStyle.navy)
             }
-            .frame(width: 54, height: 62)
-            .background(Theme.appPurpleSoft)
-            .clipShape(RoundedRectangle(cornerRadius: 15))
-
-            // Event information
-            VStack(alignment: .leading, spacing: 5) {
+            .frame(width: 62, height: 72)
+            .background(EventStyle.lavender, in: RoundedRectangle(cornerRadius: 17))
+            VStack(alignment: .leading, spacing: 6) {
                 Text(event.title)
-                    .font(Theme.display(14, weight: .bold))
-                    .foregroundStyle(Theme.appNavy)
-                    .lineLimit(1)
-
-                Text(eventInfoText())
-                    .font(Theme.ui(10))
-                    .foregroundStyle(Theme.appMuted)
-                    .lineLimit(1)
-
+                    .font(.system(size: 14, weight: .bold, design: .rounded))
+                    .foregroundStyle(EventStyle.navy)
+                    .lineLimit(2)
+                Label(event.date.formatted(date: .omitted, time: .shortened), systemImage: "clock")
+                Label(event.location, systemImage: "mappin")
                 if event.attendeeCount > 0 {
-                    Text("\(event.attendeeCount) going")
-                        .font(Theme.ui(9, weight: .semibold))
-                        .foregroundStyle(Theme.appMuted)
+                    Label("\(event.attendeeCount) attending", systemImage: "person.2")
                 }
             }
-
-            Spacer(minLength: 4)
-
-            // RSVP
-            if event.allowsRSVP {
-                Button {
-                    store.toggleRSVP(for: event)
-                } label: {
-                    Text(event.isGoing ? "I'm Going" : "RSVP")
-                        .font(Theme.ui(10, weight: .bold))
-                        .foregroundStyle(event.isGoing ? Theme.appGreen : Theme.appPurple)
-                        .padding(.horizontal, 12)
-                        .frame(height: 30)
-                        .background(
-                            event.isGoing ? Theme.appGreenSoft : Theme.appPurpleSoft
-                        )
-                        .clipShape(Capsule())
+            .font(.system(size: 11))
+            .foregroundStyle(EventStyle.muted)
+            Spacer(minLength: 0)
+            VStack(spacing: 10) {
+                if event.allowsRSVP {
+                    Button { store.toggleRSVP(for: event) } label: {
+                        Text(event.isGoing ? "Going" : "RSVP")
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundStyle(event.isGoing ? Color(red: 0.13, green: 0.55, blue: 0.42) : EventStyle.purple)
+                            .padding(.horizontal, 12).padding(.vertical, 9)
+                            .background(event.isGoing ? Color(red: 0.87, green: 0.97, blue: 0.93) : EventStyle.lavender, in: Capsule())
+                    }.buttonStyle(.borderless)
                 }
-                .buttonStyle(.borderless)
-            } else {
-                Text("Reminder")
-                    .font(Theme.ui(10, weight: .bold))
-                    .foregroundStyle(Theme.warning)
-                    .padding(.horizontal, 12)
-                    .frame(height: 30)
-                    .background(Theme.warning.opacity(0.12))
-                    .clipShape(Capsule())
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(EventStyle.muted)
             }
         }
-        .padding(12)
-        .frame(maxWidth: .infinity)
-        .background(Theme.card.opacity(0.9))
-        .clipShape(RoundedRectangle(cornerRadius: 20))
-        .overlay {
-            RoundedRectangle(cornerRadius: 20)
-                .stroke(Theme.appBorder, lineWidth: 1)
-        }
-    }
-
-    func monthText() -> String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "MMM"
-        return formatter.string(from: event.date).uppercased()
-    }
-
-    func dayText() -> String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "d"
-        return formatter.string(from: event.date)
-    }
-
-    func eventInfoText() -> String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "h:mm a"
-
-        let time = formatter.string(from: event.date)
-
-        return "\(time) · \(event.location)"
+        .padding(14)
+        .background(.white, in: RoundedRectangle(cornerRadius: 22))
+        .overlay(RoundedRectangle(cornerRadius: 22).stroke(EventStyle.navy.opacity(0.07)))
     }
 }
 
 #Preview {
-    NavigationStack {
-        EventCalendarView()
-            .environmentObject(AppStore())
-    }
+    NavigationStack { EventCalendarView().environmentObject(AppStore()) }
 }
