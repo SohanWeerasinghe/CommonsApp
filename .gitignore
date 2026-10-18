@@ -1,0 +1,30 @@
+# macOS
+.DS_Store
+
+# Xcode
+**/xcuserdata/
+**/DerivedData/
+*.xcuserstate
+*.xcuserdatad/
+
+# Backups
+*.bak
+*.before-*
+backup-before-*/
+milestone*-backup-*/
+milestone*-repair-backup-*/
+m4_patch/
+
+# Firebase logs
+firebase-debug.log
+firestore-debug.log
+ui-debug.log
+
+# Temporary files
+CommonsApp.txt
+fix_chat_display.py
+
+# Environment files
+.env
+.env.*
+!.env.example
