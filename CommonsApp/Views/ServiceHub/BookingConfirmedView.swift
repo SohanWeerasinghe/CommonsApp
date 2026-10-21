@@ -41,7 +41,7 @@ struct BookingConfirmedView: View {
                     HStack(spacing: 10) {
                         Image(systemName: "bell.fill")
                             .foregroundStyle(Theme.brass)
-                        Text("You will get a reminder\n30 minutes before your slot")
+                        Text("Your reservation is saved. You can cancel it from Gym booking before the session starts.")
                             .font(Theme.ui(13))
                             .foregroundStyle(Theme.textMuted)
                     }

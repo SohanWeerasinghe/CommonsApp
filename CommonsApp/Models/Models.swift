@@ -133,6 +133,8 @@ struct MaintenanceRequest: Identifiable, Codable, Equatable {
     var unit : String
     var submittedAt : Date
     var stage: Stage = .submitted
+    var residentId: String = ""
+    var photoPath: String? = nil
 
     enum Stage: Int, Codable, CaseIterable {
         case submitted, assigned, onTheWay, complete
@@ -158,6 +160,7 @@ struct BookingSlot: Identifiable, Codable, Equatable {
     var amenityID: UUID
     var start: Date
     var isBooked: Bool = false
+    var firestoreId: String? = nil
 }
 
 //Chat Structure

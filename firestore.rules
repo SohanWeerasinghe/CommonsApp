@@ -527,5 +527,106 @@ service cloud.firestore {
         allow update, delete: if false;
       }
     }
+    // Maintenance requests: residents see their own, admins manage all.
+    match /maintenanceRequests/{requestId} {
+      function admin() {
+        return request.auth != null
+          && request.auth.token.get('admin', false) == true;
+      }
+      function approved() {
+        return request.auth != null
+          && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+          && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.approvalStatus == 'approved';
+      }
+      allow get, list: if admin() || (approved() && resource.data.residentId == request.auth.uid);
+      allow create: if approved()
+        && request.resource.data.keys().hasOnly([
+          'title','details','unit','residentId','submittedAt','updatedAt','stage','photoPath'
+        ])
+        && request.resource.data.keys().hasAll([
+          'title','details','unit','residentId','submittedAt','updatedAt','stage'
+        ])
+        && request.resource.data.residentId == request.auth.uid
+        && request.resource.data.unit == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.unit
+        && request.resource.data.title is string
+        && request.resource.data.title.size() > 0
+        && request.resource.data.title.size() <= 120
+        && request.resource.data.details is string
+        && request.resource.data.details.size() > 0
+        && request.resource.data.details.size() <= 2000
+        && request.resource.data.submittedAt == request.time
+        && request.resource.data.updatedAt == request.time
+        && request.resource.data.stage == 0
+        && (!('photoPath' in request.resource.data)
+          || request.resource.data.photoPath == 'maintenancePhotos/' + request.auth.uid + '/' + requestId + '.jpg');
+      allow update: if admin()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['stage','updatedAt'])
+        && resource.data.stage is int
+        && resource.data.stage >= 0 && resource.data.stage < 3
+        && request.resource.data.stage == resource.data.stage + 1
+        && request.resource.data.updatedAt == request.time;
+      allow delete: if false;
+    }
+      // Gym configuration: only administrators may adjust capacity.
+    match /gymSettings/{settingId} {
+      function admin() {
+        return request.auth != null && request.auth.token.get('admin', false) == true;
+      }
+      function approved() {
+        return request.auth != null
+          && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+          && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.approvalStatus == 'approved';
+      }
+      allow read: if admin() || approved();
+      allow create, update: if settingId == 'main' && admin()
+        && request.resource.data.keys().hasOnly(['capacity'])
+        && request.resource.data.keys().hasAll(['capacity'])
+        && request.resource.data.capacity is int
+        && request.resource.data.capacity >= 1
+        && request.resource.data.capacity <= 100;
+      allow delete: if false;
+    }
+
+    // Gym session rosters. Admin creates sessions, residents change only their own membership.
+    match /gymSlots/{slotId} {
+      function admin() {
+        return request.auth != null && request.auth.token.get('admin', false) == true;
+      }
+      function approved() {
+        return request.auth != null
+          && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+          && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.approvalStatus == 'approved';
+      }
+      function capacity() {
+        return get(/databases/$(database)/documents/gymSettings/main).data.capacity;
+      }
+      function validChange() {
+        let before = resource.data.members;
+        let after = request.resource.data.members;
+        let uid = request.auth.uid;
+        return after is list && after.size() <= 100
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['members','updatedAt'])
+          && request.resource.data.updatedAt == request.time
+          && (
+            (!before.hasAny([uid]) && after.hasAll(before)
+              && after.hasAny([uid]) && after.size() == before.size() + 1
+              && after.size() <= capacity())
+            ||
+            (before.hasAny([uid]) && !after.hasAny([uid])
+              && before.hasAll(after) && after.size() == before.size() - 1)
+          );
+      }
+      allow read: if admin() || approved();
+      allow create: if admin()
+        && request.resource.data.keys().hasOnly(['start','members','updatedAt'])
+        && request.resource.data.keys().hasAll(['start','members','updatedAt'])
+        && request.resource.data.start is timestamp
+        && request.resource.data.start > request.time
+        && request.resource.data.members == []
+        && request.resource.data.updatedAt == request.time;
+      allow update: if approved() && resource.data.start > request.time
+        && validChange();
+      allow delete: if false;
+    }
   }
 }

@@ -39,8 +39,17 @@ final class AppStore: ObservableObject {
 
     //Service Hub
     @Published var maintenanceRequests: [MaintenanceRequest] = []
+    @Published var maintenanceError: String? = nil
+    private var maintenanceListener: ListenerRegistration?
     @Published var amenities: [Amenity] = []
     @Published var bookingSlots: [BookingSlot] = []
+    @Published var gymCapacity: Int = 10
+    @Published var gymOccupancy: [String: Int] = [:]
+    @Published var gymMySlotIDs: Set<String> = []
+    @Published var gymMembersBySlot: [String: [String]] = [:]
+    @Published var gymError: String? = nil
+    private var gymSlotsListener: ListenerRegistration?
+    private var gymSettingsListener: ListenerRegistration?
 
     //Chat
     @Published var chatThreads: [ChatThread] = []
@@ -111,6 +120,10 @@ final class AppStore: ObservableObject {
         chatDirectory.removeAll()
 
         stopEventsListener()
+        stopMaintenanceListener()
+        stopGymListeners()
+        maintenanceRequests.removeAll()
+        maintenanceError = nil
         events.removeAll()
         eventsError = nil
 
@@ -160,6 +173,8 @@ final class AppStore: ObservableObject {
         if isAdmin {
             onboardingStage = .admin
             startEventsListener()
+            startMaintenanceListener()
+            startGymListeners()
             return
         }
 
@@ -199,6 +214,8 @@ final class AppStore: ObservableObject {
                 startSharedItemsListener()
                 startBorrowRequestsListener()
                 startEventsListener()
+                startMaintenanceListener()
+                startGymListeners()
             case "declined":
                 onboardingStage = .accessDeclined
             default:
@@ -1301,53 +1318,239 @@ final class AppStore: ObservableObject {
 
     //Service Hub Actions
 
-    func submitMaintenanceRequest(title: String, details: String) {
-        let request = MaintenanceRequest(
-            title: title,
-            details: details,
-            unit: currentResident.unit,
-            submittedAt: Date()
-        )
-
-        maintenanceRequests.insert(request, at: 0)
-    }
-
-    func advanceStage(of request: MaintenanceRequest) {
-
-        // Find which position this request is in the array
-        guard let index = maintenanceRequests.firstIndex(where: { $0.id == request.id }) else { return }
-
-        // Move to the next stage using the correct stage names
-        if maintenanceRequests[index].stage == .submitted {
-            maintenanceRequests[index].stage = .assigned
-        } else if maintenanceRequests[index].stage == .assigned {
-            maintenanceRequests[index].stage = .onTheWay
-        } else if maintenanceRequests[index].stage == .onTheWay {
-            maintenanceRequests[index].stage = .complete
+    // MARK: - Firebase maintenance requests
+    // Residents query their own documents; admins query all documents.
+    func startMaintenanceListener() {
+        guard maintenanceListener == nil,
+              onboardingStage == .active || onboardingStage == .admin,
+              let uid = Auth.auth().currentUser?.uid else { return }
+        let collection = Firestore.firestore().collection("maintenanceRequests")
+        let query: Query = onboardingStage == .admin
+            ? collection
+            : collection.whereField("residentId", isEqualTo: uid)
+        maintenanceListener = query.addSnapshotListener { [weak self] snapshot, error in
+            Task { @MainActor [weak self] in
+                guard let self, Auth.auth().currentUser?.uid == uid,
+                      self.onboardingStage == .active || self.onboardingStage == .admin else { return }
+                if let error {
+                    self.maintenanceError = error.localizedDescription
+                    return
+                }
+                self.maintenanceError = nil
+                self.maintenanceRequests = (snapshot?.documents ?? []).compactMap { document in
+                    let data = document.data()
+                    guard let title = data["title"] as? String,
+                          let details = data["details"] as? String,
+                          let unit = data["unit"] as? String,
+                          let residentId = data["residentId"] as? String,
+                          let submittedAt = (data["submittedAt"] as? Timestamp)?.dateValue(),
+                          let stageNumber = data["stage"] as? Int,
+                          let stage = MaintenanceRequest.Stage(rawValue: stageNumber),
+                          let id = UUID(uuidString: document.documentID) else { return nil }
+                    return MaintenanceRequest(id: id, title: title, details: details,
+                                              unit: unit, submittedAt: submittedAt,
+                                              stage: stage, residentId: residentId,
+                                              photoPath: data["photoPath"] as? String)
+                }.sorted { $0.submittedAt > $1.submittedAt }
+            }
         }
-        // If already complete we do nothing
     }
 
-    func book(_ slot: BookingSlot) {
-        // Find slot and mark as booked
-        for index in 0..<bookingSlots.count {
-            if bookingSlots[index].id == slot.id {
-                bookingSlots[index].isBooked = true
-                break
+    func stopMaintenanceListener() {
+        maintenanceListener?.remove()
+        maintenanceListener = nil
+    }
+
+    // Photos are analyzed on-device by Core ML and are never uploaded.
+    // Only resident-reviewed title and description are stored in Firestore.
+    @MainActor
+    func submitMaintenanceRequest(title: String, details: String, photoData: Data?) async throws {
+        guard onboardingStage == .active,
+              let user = Auth.auth().currentUser else {
+            throw NSError(domain: "CommonsApp.Maintenance", code: 401,
+                          userInfo: [NSLocalizedDescriptionKey: "Only approved residents can submit requests."])
+        }
+        let cleanTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanDetails = details.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanTitle.isEmpty, cleanTitle.count <= 120,
+              !cleanDetails.isEmpty, cleanDetails.count <= 2000 else {
+            throw NSError(domain: "CommonsApp.Maintenance", code: 400,
+                          userInfo: [NSLocalizedDescriptionKey: "Check the title and description lengths."])
+        }
+        // Keep the existing method signature so the SwiftUI form is unchanged.
+        // The image remains only in the current on-device form session.
+        _ = photoData
+        let requestId = UUID().uuidString.lowercased()
+        let fields: [String: Any] = [
+            "title": cleanTitle, "details": cleanDetails,
+            "unit": currentResident.unit, "residentId": user.uid,
+            "submittedAt": FieldValue.serverTimestamp(),
+            "updatedAt": FieldValue.serverTimestamp(), "stage": 0
+        ]
+        try await Firestore.firestore().collection("maintenanceRequests")
+            .document(requestId).setData(fields)
+    }
+
+    @MainActor
+    func advanceStage(of request: MaintenanceRequest) async throws {
+        guard onboardingStage == .admin, Auth.auth().currentUser != nil else {
+            throw NSError(domain: "CommonsApp.Maintenance", code: 403,
+                          userInfo: [NSLocalizedDescriptionKey: "Administrator access required."])
+        }
+        guard request.stage != .complete else { return }
+        try await Firestore.firestore().collection("maintenanceRequests")
+            .document(request.id.uuidString.lowercased())
+            .updateData(["stage": request.stage.rawValue + 1,
+                         "updatedAt": FieldValue.serverTimestamp()])
+    }
+
+    // MARK: - Gym reservations. One document per administrator-created slot.
+    // Membership is an array in that document; concurrent changes use transactions.
+    @MainActor
+    func startGymListeners() {
+        guard gymSlotsListener == nil, gymSettingsListener == nil,
+              onboardingStage == .active || onboardingStage == .admin,
+              let uid = Auth.auth().currentUser?.uid else { return }
+        gymSettingsListener = Firestore.firestore().collection("gymSettings")
+            .document("main").addSnapshotListener { [weak self] snapshot, error in
+                Task { @MainActor [weak self] in
+                    guard let self, Auth.auth().currentUser?.uid == uid else { return }
+                    if let error { self.gymError = error.localizedDescription; return }
+                    self.gymCapacity = max(1, snapshot?.data()?["capacity"] as? Int ?? 10)
+                }
+            }
+        gymSlotsListener = Firestore.firestore().collection("gymSlots")
+            .whereField("start", isGreaterThanOrEqualTo: Timestamp(date: Calendar.current.startOfDay(for: Date())))
+            .addSnapshotListener { [weak self] snapshot, error in
+                Task { @MainActor [weak self] in
+                    guard let self, Auth.auth().currentUser?.uid == uid else { return }
+                    if let error { self.gymError = error.localizedDescription; return }
+                    self.gymError = nil
+                    let docs = snapshot?.documents ?? []
+                    self.gymOccupancy = Dictionary(uniqueKeysWithValues: docs.map {
+                        ($0.documentID, ($0.data()["members"] as? [String] ?? []).count)
+                    })
+                    self.gymMembersBySlot = Dictionary(uniqueKeysWithValues: docs.map {
+                        ($0.documentID, $0.data()["members"] as? [String] ?? [])
+                    })
+                    self.gymMySlotIDs = Set(docs.filter {
+                        ($0.data()["members"] as? [String] ?? []).contains(uid)
+                    }.map(\.documentID))
+                    let gymID = self.amenities.first(where: { $0.name == "Gym" })?.id ?? UUID()
+                    self.bookingSlots = docs.compactMap { doc in
+                        guard let start = (doc.data()["start"] as? Timestamp)?.dateValue() else { return nil }
+                        return BookingSlot(amenityID: gymID, start: start, firestoreId: doc.documentID)
+                    }.sorted { $0.start < $1.start }
+                }
+            }
+    }
+
+    func stopGymListeners() {
+        gymSlotsListener?.remove(); gymSlotsListener = nil
+        gymSettingsListener?.remove(); gymSettingsListener = nil
+        gymOccupancy.removeAll(); gymMembersBySlot.removeAll()
+        gymMySlotIDs.removeAll(); bookingSlots.removeAll()
+    }
+
+    @MainActor
+    func setGymCapacity(_ capacity: Int) async throws {
+        guard onboardingStage == .admin, (1...100).contains(capacity) else {
+            throw gymFailure("Administrator access and a capacity of 1–100 are required.")
+        }
+        try await Firestore.firestore().collection("gymSettings")
+            .document("main").setData(["capacity": capacity], merge: true)
+    }
+
+    // Admin creates the next 14 days of hourly slots, 9 AM–8 PM.
+    // Existing slots are never overwritten (preserves reservations).
+    @MainActor
+    func prepareGymSlots() async throws {
+        guard onboardingStage == .admin else { throw gymFailure("Administrator access required.") }
+        let db = Firestore.firestore()
+        let settings = db.collection("gymSettings").document("main")
+        if !(try await settings.getDocument(source: .server)).exists {
+            try await settings.setData(["capacity": 10])
+        }
+        let calendar = Calendar.current
+        let collection = db.collection("gymSlots")
+        let existing = try await collection
+            .whereField("start", isGreaterThanOrEqualTo: Timestamp(date: Date()))
+            .getDocuments(source: .server)
+        let existingIDs = Set(existing.documents.map(\.documentID))
+        let batch = db.batch()
+        var newCount = 0
+        for dayOffset in 0..<14 {
+            guard let day = calendar.date(byAdding: .day, value: dayOffset,
+                                          to: calendar.startOfDay(for: Date())) else { continue }
+            for hour in 9..<21 {
+                guard let start = calendar.date(bySettingHour: hour, minute: 0, second: 0, of: day),
+                      start > Date() else { continue }
+                let key = gymSlotKey(start)
+                guard !existingIDs.contains(key) else { continue }
+                batch.setData([
+                    "start": Timestamp(date: start), "members": [String](),
+                    "updatedAt": FieldValue.serverTimestamp()
+                ], forDocument: collection.document(key))
+                newCount += 1
+            }
+        }
+        if newCount > 0 { try await batch.commit() }
+    }
+
+    // Locale-independent document key shared by all devices.
+    private func gymSlotKey(_ date: Date) -> String {
+        let f = DateFormatter(); f.locale = Locale(identifier: "en_US_POSIX")
+        f.timeZone = TimeZone(identifier: "Asia/Colombo")
+        f.dateFormat = "yyyyMMddHH"
+        return f.string(from: date)
+    }
+
+    @MainActor
+    func reserveGymSlot(_ slot: BookingSlot, cancel: Bool = false) async throws {
+        guard onboardingStage == .active, let uid = Auth.auth().currentUser?.uid,
+              let id = slot.firestoreId, slot.start > Date() else {
+            throw gymFailure("Please choose a future Gym slot while signed in as a resident.")
+        }
+        let db = Firestore.firestore()
+        let ref = db.collection("gymSlots").document(id)
+        let config = db.collection("gymSettings").document("main")
+        _ = try await db.runTransaction { transaction, errorPointer -> Any? in
+            do {
+                let setting = try transaction.getDocument(config)
+                let snap = try transaction.getDocument(ref)
+                guard let data = snap.data(),
+                      let members = data["members"] as? [String],
+                      let start = (data["start"] as? Timestamp)?.dateValue(),
+                      start > Date() else { throw self.gymFailure("This slot is no longer available.") }
+                let capacity = setting.data()?["capacity"] as? Int ?? 0
+                var next = members
+                if cancel {
+                    guard members.contains(uid) else { throw self.gymFailure("No reservation to cancel.") }
+                    next.removeAll { $0 == uid }
+                } else {
+                    guard !members.contains(uid) else { throw self.gymFailure("You already booked this slot.") }
+                    guard members.count < capacity else { throw self.gymFailure("This Gym slot is full.") }
+                    next.append(uid)
+                }
+                transaction.updateData([
+                    "members": next, "updatedAt": FieldValue.serverTimestamp()
+                ], forDocument: ref)
+                return nil
+            } catch {
+                errorPointer?.pointee = error as NSError
+                return nil
             }
         }
     }
 
     func getSlots(for amenity: Amenity) -> [BookingSlot] {
-        // Go through all slots and return only the ones
-        // that belong to this amenity
-        var result: [BookingSlot] = []
-        for slot in bookingSlots {
-            if slot.amenityID == amenity.id {
-                result.append(slot)
-            }
-        }
-        return result
+        guard amenity.name == "Gym" else { return [] }
+        return bookingSlots.filter { $0.amenityID == amenity.id && $0.start > Date() }
+    }
+
+    private func gymFailure(_ message: String) -> NSError {
+        NSError(domain: "CommonsApp.Gym", code: 400,
+                userInfo: [NSLocalizedDescriptionKey: message])
     }
 
     //Chat
@@ -1390,7 +1593,7 @@ final class AppStore: ObservableObject {
                 authorUnit: "—",
                 timestamp: now,
                 category: .announcement,
-                text: "Water shut off Tuesday 10am–2pm. Building-wide maintenance on the 3rd floor line.",
+                text: "",
                 isPinned: true
             ),
             Post(
@@ -1422,18 +1625,11 @@ final class AppStore: ObservableObject {
         events = []
 
         //Create sample maintenance request
-        maintenanceRequests = [
-            MaintenanceRequest(title: "Kitchen faucet leak", details: "Slow drip under the handle.", unit: "4B", submittedAt: now, stage: .onTheWay)
-        ]
+        maintenanceRequests = []
 
         //Create sample amenities
-        amenities = [
-            Amenity(name: "Gym", subtitle: "Open now"),
-            Amenity(name: "Community Room", subtitle: "3 slots today"),
-            Amenity(name: "Guest Suite", subtitle: "Book ahead")
-        ]
-
-        seedBookingSlots()
+        amenities = [Amenity(name: "Gym", subtitle: "Reserve your workout time")]
+        bookingSlots = []
 
         //Create sample pending residents
         pendingResidents = [
@@ -1441,7 +1637,7 @@ final class AppStore: ObservableObject {
             PendingResident(id: "demo-tom", name: "Tom Alcott", unit: "11D", requestedAt: now)
         ]
 
-        pinnedAnnouncementText = "Water shut off Tuesday, 10am–2pm."
+        pinnedAnnouncementText = ""
 
         //Create offline cache items
         offlineCache = [
@@ -1450,39 +1646,6 @@ final class AppStore: ObservableObject {
             OfflineCacheItem(label: "Building Wall feed", isCached: true, lastSynced: now),
             OfflineCacheItem(label: "Photos & attachments", isCached: false, lastSynced: nil)
         ]
-    }
-
-    private func seedBookingSlots() {
-        // Find Community Room by name instead of guessing the index
-        var communityRoom: Amenity? = nil
-        for amenity in amenities {
-            if amenity.name == "Community Room" {
-                communityRoom = amenity
-                break
-            }
-        }
-
-        // If we didn't find it, stop here
-        if communityRoom == nil { return }
-
-        let cal = Calendar.current
-        // Start at 9am today
-        let base = cal.date(bySettingHour: 9, minute: 0, second: 0, of: Date())!
-
-        bookingSlots = []
-        for index in 0..<10 {
-            let isSlotBooked = (index == 2 || index == 5 || index == 8)
-
-            // Each slot is 1 hour apart
-            let slotTime = cal.date(byAdding: .hour, value: index, to: base)!
-
-            let slot = BookingSlot(
-                amenityID: communityRoom!.id,
-                start: slotTime,
-                isBooked: isSlotBooked
-            )
-            bookingSlots.append(slot)
-        }
     }
 
     //App Lock (Face ID / Touch ID)

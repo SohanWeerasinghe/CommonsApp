@@ -7,8 +7,10 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		AABBCC001122334455667799 /* CommunityEventEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC001122334455667788 /* CommunityEventEditor.swift */; };
+		2E8AB5F00846457A81C6B03A /* AdminResidentVerificationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 973DC45459B94486BA3EF3A1 /* AdminResidentVerificationView.swift */; };
+		491770C9407C4CEAA9656148 /* AdminMaintenanceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3D57776C6574A65AF7A243E /* AdminMaintenanceView.swift */; };
 		72073BAF3083F9A40032F504 /* BorrowingFlowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 72073BAE3083F9A40032F504 /* BorrowingFlowView.swift */; };
+		7217F29A3088E94300F1E520 /* FirebaseStorage in Frameworks */ = {isa = PBXBuildFile; productRef = 7217F2993088E94300F1E520 /* FirebaseStorage */; };
 		72387211306BB0570061D2FD /* CommonsAppApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7238720E306BB0570061D2FD /* CommonsAppApp.swift */; };
 		72387212306BB0570061D2FD /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 72387210306BB0570061D2FD /* RootView.swift */; };
 		72387213306BB0570061D2FD /* MainTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7238720F306BB0570061D2FD /* MainTabView.swift */; };
@@ -50,6 +52,10 @@
 		72E3EAB4307A4D8F0072F36C /* FirebaseCore in Frameworks */ = {isa = PBXBuildFile; productRef = 72E3EAB3307A4D8F0072F36C /* FirebaseCore */; };
 		72E3EAB6307A4D8F0072F36C /* FirebaseFirestore in Frameworks */ = {isa = PBXBuildFile; productRef = 72E3EAB5307A4D8F0072F36C /* FirebaseFirestore */; };
 		72E3EAB8307A4F500072F36C /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = 72E3EAB7307A4F500072F36C /* GoogleService-Info.plist */; };
+		AABBCC001122334455667799 /* CommunityEventEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC001122334455667788 /* CommunityEventEditor.swift */; };
+		D2611236F9284CE986E611D7 /* AdminEventsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4FC5A9A07D74A879A331E39 /* AdminEventsView.swift */; };
+		EF68A629E60E4E8087EC4095 /* AdminGymManagementView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B9CC58219CF4298B1D73576 /* AdminGymManagementView.swift */; };
+		FC457A9C9CCB47308991262D /* AdminAnnouncementsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74687F76BE39404FBD4EEED0 /* AdminAnnouncementsView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -75,7 +81,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
-		AABBCC001122334455667788 /* CommunityEventEditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommunityEventEditor.swift; sourceTree = "<group>"; };
+		1B9CC58219CF4298B1D73576 /* AdminGymManagementView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdminGymManagementView.swift; sourceTree = "<group>"; };
 		72073BAE3083F9A40032F504 /* BorrowingFlowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BorrowingFlowView.swift; sourceTree = "<group>"; };
 		7238720E306BB0570061D2FD /* CommonsAppApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommonsAppApp.swift; sourceTree = "<group>"; };
 		7238720F306BB0570061D2FD /* MainTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainTabView.swift; sourceTree = "<group>"; };
@@ -117,6 +123,11 @@
 		72767C8C3067CA5C0078788B /* CommonsWidgetExtension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = CommonsWidgetExtension.entitlements; sourceTree = "<group>"; };
 		7278C558306E65FA00B4E143 /* MaintenanceYOLO.mlpackage */ = {isa = PBXFileReference; lastKnownFileType = folder.mlpackage; name = MaintenanceYOLO.mlpackage; path = Models/MaintenanceYOLO.mlpackage; sourceTree = "<group>"; };
 		72E3EAB7307A4F500072F36C /* GoogleService-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "GoogleService-Info.plist"; sourceTree = "<group>"; };
+		74687F76BE39404FBD4EEED0 /* AdminAnnouncementsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdminAnnouncementsView.swift; sourceTree = "<group>"; };
+		973DC45459B94486BA3EF3A1 /* AdminResidentVerificationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdminResidentVerificationView.swift; sourceTree = "<group>"; };
+		AABBCC001122334455667788 /* CommunityEventEditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommunityEventEditor.swift; sourceTree = "<group>"; };
+		D3D57776C6574A65AF7A243E /* AdminMaintenanceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdminMaintenanceView.swift; sourceTree = "<group>"; };
+		D4FC5A9A07D74A879A331E39 /* AdminEventsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdminEventsView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -145,6 +156,7 @@
 			isa = PBXFrameworksBuildPhase;
 			files = (
 				72E3EAB4307A4D8F0072F36C /* FirebaseCore in Frameworks */,
+				7217F29A3088E94300F1E520 /* FirebaseStorage in Frameworks */,
 				72E3EAB2307A4D8F0072F36C /* FirebaseAuth in Frameworks */,
 				72E3EAB6307A4D8F0072F36C /* FirebaseFirestore in Frameworks */,
 			);
@@ -194,6 +206,11 @@
 		7238721D306BB0F70061D2FD /* Admin */ = {
 			isa = PBXGroup;
 			children = (
+				1B9CC58219CF4298B1D73576 /* AdminGymManagementView.swift */,
+				D3D57776C6574A65AF7A243E /* AdminMaintenanceView.swift */,
+				973DC45459B94486BA3EF3A1 /* AdminResidentVerificationView.swift */,
+				74687F76BE39404FBD4EEED0 /* AdminAnnouncementsView.swift */,
+				D4FC5A9A07D74A879A331E39 /* AdminEventsView.swift */,
 				7238721C306BB0F70061D2FD /* AdminPanelView.swift */,
 			);
 			path = Admin;
@@ -374,6 +391,7 @@
 				72E3EAB1307A4D8F0072F36C /* FirebaseAuth */,
 				72E3EAB3307A4D8F0072F36C /* FirebaseCore */,
 				72E3EAB5307A4D8F0072F36C /* FirebaseFirestore */,
+				7217F2993088E94300F1E520 /* FirebaseStorage */,
 			);
 			productName = CommonsApp;
 			productReference = 72767BF83060EC830078788B /* CommonsApp.app */;
@@ -481,6 +499,11 @@
 				7238724C306BB0F70061D2FD /* LendBorrowView.swift in Sources */,
 				7278C559306E65FA00B4E143 /* MaintenanceYOLO.mlpackage in Sources */,
 				7238724D306BB0F70061D2FD /* AdminPanelView.swift in Sources */,
+				EF68A629E60E4E8087EC4095 /* AdminGymManagementView.swift in Sources */,
+				491770C9407C4CEAA9656148 /* AdminMaintenanceView.swift in Sources */,
+				2E8AB5F00846457A81C6B03A /* AdminResidentVerificationView.swift in Sources */,
+				FC457A9C9CCB47308991262D /* AdminAnnouncementsView.swift in Sources */,
+				D2611236F9284CE986E611D7 /* AdminEventsView.swift in Sources */,
 				7238724E306BB0F70061D2FD /* ResidentProfileView.swift in Sources */,
 				7238724F306BB0F70061D2FD /* NewPostView.swift in Sources */,
 				72387250306BB0F70061D2FD /* MaintenanceLiveActivity.swift in Sources */,
@@ -812,6 +835,11 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		7217F2993088E94300F1E520 /* FirebaseStorage */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 72E3EAB0307A4D8F0072F36C /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseStorage;
+		};
 		72E3EAB1307A4D8F0072F36C /* FirebaseAuth */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 72E3EAB0307A4D8F0072F36C /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
