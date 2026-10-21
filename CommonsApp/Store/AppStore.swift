@@ -17,10 +17,11 @@ final class AppStore: ObservableObject {
     @Published var onboardingStage: OnboardingStage = .loading
     @Published var pendingEmail: String = ""
     @Published var currentResident = Resident(name: "", unit: "")
-    
+
     //Feed
     @Published var posts: [Post] = []
-    
+    @Published var eventNoticePosts: [Post] = []
+
     //Lend & Borrow
     @Published var items: [SharedItem] = []
     @Published var reservedSharedItemIds: Set<String> = []
@@ -28,18 +29,31 @@ final class AppStore: ObservableObject {
     @Published var borrowRequests: [BorrowRequest] = []
     @Published var borrowRequestsError: String? = nil
     private var borrowRequestsListener: ListenerRegistration?
-    
+
     //Events
     @Published var events: [BuildingEvent] = []
-    
+    @Published var eventsError: String? = nil
+    private var eventsListener: ListenerRegistration?
+    private var eventAttendeeListeners: [String: ListenerRegistration] = [:]
+
+
     //Service Hub
     @Published var maintenanceRequests: [MaintenanceRequest] = []
+    @Published var maintenanceError: String? = nil
+    private var maintenanceListener: ListenerRegistration?
     @Published var amenities: [Amenity] = []
     @Published var bookingSlots: [BookingSlot] = []
-    
+    @Published var gymCapacity: Int = 10
+    @Published var gymOccupancy: [String: Int] = [:]
+    @Published var gymMySlotIDs: Set<String> = []
+    @Published var gymMembersBySlot: [String: [String]] = [:]
+    @Published var gymError: String? = nil
+    private var gymSlotsListener: ListenerRegistration?
+    private var gymSettingsListener: ListenerRegistration?
+
     //Chat
     @Published var chatThreads: [ChatThread] = []
-    
+
     //Admin
     @Published var pendingResidents: [PendingResident] = []
     @Published var pinnedAnnouncementText: String = ""
@@ -50,23 +64,23 @@ final class AppStore: ObservableObject {
     private var chatDirectory: [String: (name: String, unit: String)] = [:]
     private var chatThreadsListener: ListenerRegistration?
     private var chatMessageListeners: [String: ListenerRegistration] = [:]
-    
+
     //Settings
     @Published var offlineCache: [OfflineCacheItem] = []
     @Published var appLockEnabled: Bool = false
     @Published var isLocked: Bool = false
-    
+
     //Demo
     @Published var isManagerMode: Bool = false
-    
+
     //Sample data loading
-    
+
     init() {
         seedSampleData()
     }
-    
+
     //Onboarding Actions
-    
+
     func sendMagicLink() {
         // Replaced by Firebase email/password registration.
         // Authentication will be handled by the sign-in form.
@@ -105,9 +119,18 @@ final class AppStore: ObservableObject {
         stopChatListeners()
         chatDirectory.removeAll()
 
+        stopEventsListener()
+        stopMaintenanceListener()
+        stopGymListeners()
+        maintenanceRequests.removeAll()
+        maintenanceError = nil
+        events.removeAll()
+        eventsError = nil
+
         // Clear data from the previous resident's session.
         pinnedAnnouncementText = ""
         posts.removeAll()
+        eventNoticePosts.removeAll()
         chatThreads.removeAll()
 
         pendingEmail = ""
@@ -131,7 +154,7 @@ final class AppStore: ObservableObject {
             onboardingStage = .signIn
         }
     }
-    
+
     //checks the signed-in resident's Firestore profile and routes them correctly
     @MainActor
     func loadResidentAccountStatus() async throws {
@@ -149,6 +172,9 @@ final class AppStore: ObservableObject {
 
         if isAdmin {
             onboardingStage = .admin
+            startEventsListener()
+            startMaintenanceListener()
+            startGymListeners()
             return
         }
 
@@ -187,6 +213,9 @@ final class AppStore: ObservableObject {
                 onboardingStage = .active
                 startSharedItemsListener()
                 startBorrowRequestsListener()
+                startEventsListener()
+                startMaintenanceListener()
+                startGymListeners()
             case "declined":
                 onboardingStage = .accessDeclined
             default:
@@ -194,9 +223,9 @@ final class AppStore: ObservableObject {
             }
         }
     }
-    
+
     //use to save the user data to firestore
-    
+
     @MainActor
     func saveResidentProfile(
         name: String,
@@ -248,7 +277,7 @@ final class AppStore: ObservableObject {
         pendingEmail = email
         onboardingStage = .waitingRoom
     }
-    
+
     // Load pending resident applications for the administrator.
     @MainActor
     func loadPendingResidents() async throws {
@@ -341,14 +370,14 @@ final class AppStore: ObservableObject {
     }
 
     //Feed Actions
-    
+
     func addPost(text: String, category: Post.Category, hasPhoto: Bool) {
         // Figure out the name to use (default to "You" if empty)
         var authorName = currentResident.name
         if authorName.isEmpty {
             authorName = "You"
         }
-        
+
         let post = Post(
             authorName: authorName,
             authorUnit: currentResident.unit,
@@ -357,11 +386,11 @@ final class AppStore: ObservableObject {
             text: text,
             hasPhoto: hasPhoto
         )
-        
+
         // Add the new post to the top of the list
         posts.insert(post, at: 0)
     }
-    
+
     func saveResidentPostToFirestore(
         text: String,
         category: Post.Category,
@@ -692,7 +721,7 @@ final class AppStore: ObservableObject {
             }
         }
     }
-    
+
     //Prevents creating a conversation with me
     @MainActor
     func createChat(with neighborUID: String) async throws -> String {
@@ -736,9 +765,9 @@ final class AppStore: ObservableObject {
 
         return chatId
     }
-    
+
     //Lend & Borrow
-    
+
     @MainActor
     func startSharedItemsListener() {
         guard sharedItemsListener == nil, onboardingStage == .active,
@@ -1011,78 +1040,521 @@ final class AppStore: ObservableObject {
     }
 
     //Events
-    
-    func toggleRSVP(for event: BuildingEvent) {
-        // Find the event in the list
-        for index in 0..<events.count {
-            if events[index].id == event.id {
-                // Flip the going status (true becomes false, false becomes true)
-                events[index].isGoing.toggle()
-                
-                // Adjust attendee count based on new status
-                if events[index].isGoing {
-                    events[index].attendeeCount += 1
-                } else {
-                    events[index].attendeeCount -= 1
+    @MainActor
+    func startEventsListener() {
+        guard eventsListener == nil,
+              onboardingStage == .active || onboardingStage == .admin,
+              let uid = Auth.auth().currentUser?.uid else { return }
+
+        eventsError = nil
+
+        eventsListener = Firestore.firestore()
+            .collection("events")
+            .addSnapshotListener { [weak self] snapshot, error in
+                Task { @MainActor [weak self] in
+                    guard let self,
+                          Auth.auth().currentUser?.uid == uid,
+                          self.onboardingStage == .active ||
+                          self.onboardingStage == .admin else { return }
+
+                    if let error {
+                        self.eventsError = error.localizedDescription
+                        return
+                    }
+
+                    self.eventsError = nil
+
+                    self.events = (snapshot?.documents ?? []).compactMap { doc in
+                        let data = doc.data()
+
+                        guard let title = data["title"] as? String,
+                              let date = (data["date"] as? Timestamp)?.dateValue(),
+                              let location = data["location"] as? String,
+                              let statusString = data["status"] as? String,
+                              let status = BuildingEvent.Status(rawValue: statusString)
+                        else { return nil }
+
+                        let previousEvent = self.events.first {
+                            $0.firestoreId == doc.documentID
+                        }
+
+                        var event = BuildingEvent(
+                            id: previousEvent?.id ?? UUID(),
+                            title: title,
+                            date: date,
+                            location: location,
+                            attendeeCount: previousEvent?.attendeeCount ?? 0,
+                            isGoing: previousEvent?.isGoing ?? false
+                        )
+
+                        event.firestoreId = doc.documentID
+                        event.description = data["description"] as? String ?? ""
+                        event.endDate = (data["endDate"] as? Timestamp)?.dateValue()
+                        event.allowsRSVP = data["allowsRSVP"] as? Bool ?? false
+                        event.status = status
+                        event.createdBy = data["createdBy"] as? String ?? ""
+
+                        return event
+                    }
+                    .sorted { $0.date < $1.date }
+                    self.syncEventAttendeeListeners(for: self.events, uid: uid)
                 }
-                break
+            }
+    }
+
+    @MainActor
+    private func syncEventAttendeeListeners(
+        for currentEvents: [BuildingEvent],
+        uid: String
+    ) {
+        let eventIds = Set(currentEvents.compactMap(\.firestoreId))
+
+        // Remove listeners for events that no longer exist.
+        for (eventId, listener) in eventAttendeeListeners {
+            if !eventIds.contains(eventId) {
+                listener.remove()
+                eventAttendeeListeners.removeValue(forKey: eventId)
+            }
+        }
+
+        // Listen to attendee changes for each event.
+        for eventId in eventIds {
+            guard eventAttendeeListeners[eventId] == nil else {
+                continue
+            }
+
+            let listener = Firestore.firestore()
+                .collection("events")
+                .document(eventId)
+                .collection("attendees")
+                .addSnapshotListener { [weak self] snapshot, error in
+                    Task { @MainActor [weak self] in
+                        guard let self,
+                              Auth.auth().currentUser?.uid == uid,
+                              self.eventAttendeeListeners[eventId] != nil,
+                              self.onboardingStage == .active ||
+                              self.onboardingStage == .admin else {
+                            return
+                        }
+
+                        if let error {
+                            self.eventsError = error.localizedDescription
+                            return
+                        }
+
+                        let attendees = snapshot?.documents ?? []
+                        let count = attendees.count
+                        let isGoing = attendees.contains {
+                            $0.documentID == uid
+                        }
+
+                        guard let index = self.events.firstIndex(where: {
+                            $0.firestoreId == eventId
+                        }) else {
+                            return
+                        }
+
+                        self.events[index].attendeeCount = count
+                        self.events[index].isGoing = isGoing
+                    }
+                }
+
+            eventAttendeeListeners[eventId] = listener
+        }
+    }
+
+    @MainActor
+    func stopEventsListener() {
+        eventsListener?.remove()
+        eventsListener = nil
+
+        for listener in eventAttendeeListeners.values {
+            listener.remove()
+        }
+
+        eventAttendeeListeners.removeAll()
+    }
+
+    @MainActor
+    func toggleRSVP(for event: BuildingEvent) {
+        guard onboardingStage == .active,
+              let uid = Auth.auth().currentUser?.uid,
+              let eventId = event.firestoreId,
+              !eventId.isEmpty,
+              event.allowsRSVP,
+              !event.isCancelled,
+              event.date > Date() else {
+            eventsError = "RSVP is not available for this event."
+            return
+        }
+
+        Task { @MainActor in
+            do {
+                let db = Firestore.firestore()
+                let eventRef = db.collection("events").document(eventId)
+                let attendeeRef = eventRef.collection("attendees").document(uid)
+
+                // Read the current RSVP from Firestore, not local demo state.
+                let existing = try await attendeeRef.getDocument(source: .server)
+
+                if existing.exists {
+                    try await attendeeRef.delete()
+                } else {
+                    try await attendeeRef.setData([
+                        "userId": uid,
+                        "createdAt": FieldValue.serverTimestamp()
+                    ])
+                }
+
+                eventsError = nil
+            } catch {
+                eventsError = error.localizedDescription
+                print("Events RSVP error: \(error.localizedDescription)")
             }
         }
     }
-    
+
+    // Admin-only event writes. Firestore rules independently verify the admin claim.
+    @MainActor
+    func saveCommunityEvent(
+        existing: BuildingEvent?, title: String, description: String,
+        start: Date, end: Date, location: String, allowsRSVP: Bool
+    ) async throws {
+        guard onboardingStage == .admin, let user = Auth.auth().currentUser else {
+            throw eventError("Administrator access required.")
+        }
+        let token = try await user.getIDTokenResult(forcingRefresh: true)
+        guard token.claims["admin"] as? Bool == true else {
+            throw eventError("Administrator permission was not verified.")
+        }
+        let name = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let details = description.trimmingCharacters(in: .whitespacesAndNewlines)
+        let place = location.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty, name.count <= 100,
+              details.count <= 2000, !place.isEmpty, place.count <= 200,
+              start > Date(), end > start else {
+            throw eventError("Enter a title, location, future start time and a later end time.")
+        }
+        let db = Firestore.firestore()
+        let eventRef: DocumentReference
+        let action: String
+        let batch = db.batch()
+        if let existing {
+            guard let id = existing.firestoreId, !id.isEmpty,
+                  !existing.isCancelled else { throw eventError("This event cannot be edited.") }
+            eventRef = db.collection("events").document(id)
+            action = "updated"
+            batch.updateData([
+                "title": name, "description": details,
+                "date": Timestamp(date: start), "endDate": Timestamp(date: end),
+                "location": place, "allowsRSVP": allowsRSVP,
+                "updatedAt": FieldValue.serverTimestamp()
+            ], forDocument: eventRef)
+        } else {
+            eventRef = db.collection("events").document()
+            action = "created"
+            batch.setData([
+                "title": name, "description": details,
+                "date": Timestamp(date: start), "endDate": Timestamp(date: end),
+                "location": place, "allowsRSVP": allowsRSVP,
+                "status": "active", "createdBy": user.uid,
+                "createdAt": FieldValue.serverTimestamp(),
+                "updatedAt": FieldValue.serverTimestamp()
+            ], forDocument: eventRef)
+        }
+        let notice = eventNoticeText(action: action, title: name, date: start, location: place)
+        let noticeRef = db.collection("announcements").document()
+        batch.setData([
+            "text": notice, "createdAt": FieldValue.serverTimestamp(),
+            "createdBy": user.uid, "isPinned": false,
+            "eventId": eventRef.documentID, "eventAction": action
+        ], forDocument: noticeRef)
+        try await batch.commit()
+    }
+
+    @MainActor
+    func cancelCommunityEvent(_ event: BuildingEvent) async throws {
+        guard onboardingStage == .admin,
+              let user = Auth.auth().currentUser,
+              let id = event.firestoreId, !id.isEmpty,
+              !event.isCancelled else { throw eventError("Cannot cancel this event.") }
+        let token = try await user.getIDTokenResult(forcingRefresh: true)
+        guard token.claims["admin"] as? Bool == true else {
+            throw eventError("Administrator permission was not verified.")
+        }
+        let db = Firestore.firestore()
+        let batch = db.batch()
+        batch.updateData([
+            "status": "cancelled", "updatedAt": FieldValue.serverTimestamp()
+        ], forDocument: db.collection("events").document(id))
+        let noticeRef = db.collection("announcements").document()
+        batch.setData([
+            "text": eventNoticeText(action: "cancelled", title: event.title,
+                                    date: event.date, location: event.location),
+            "createdAt": FieldValue.serverTimestamp(),
+            "createdBy": user.uid, "isPinned": false,
+            "eventId": id, "eventAction": "cancelled"
+        ], forDocument: noticeRef)
+        try await batch.commit()
+    }
+
+    private func eventNoticeText(action: String, title: String, date: Date,
+                                 location: String) -> String {
+        let when = date.formatted(date: .abbreviated, time: .shortened)
+        switch action {
+        case "created":
+            return "📅 New community event: \(title)\nWhen: \(when)\nWhere: \(location)"
+        case "updated":
+            return "📝 Event updated: \(title)\nUpdated schedule: \(when)\nLocation: \(location)"
+        default:
+            return "❌ Event cancelled: \(title)\nOriginally scheduled: \(when)\nLocation: \(location)\nThis event will not take place."
+        }
+    }
+
+    private func eventError(_ message: String) -> NSError {
+        NSError(domain: "CommonsApp.Events", code: 400,
+                userInfo: [NSLocalizedDescriptionKey: message])
+    }
+
     //Service Hub Actions
-    
-    func submitMaintenanceRequest(title: String, details: String) {
-        let request = MaintenanceRequest(
-            title: title,
-            details: details,
-            unit: currentResident.unit,
-            submittedAt: Date()
-        )
-        
-        maintenanceRequests.insert(request, at: 0)
-    }
-    
-    func advanceStage(of request: MaintenanceRequest) {
-        
-        // Find which position this request is in the array
-        guard let index = maintenanceRequests.firstIndex(where: { $0.id == request.id }) else { return }
-        
-        // Move to the next stage using the correct stage names
-        if maintenanceRequests[index].stage == .submitted {
-            maintenanceRequests[index].stage = .assigned
-        } else if maintenanceRequests[index].stage == .assigned {
-            maintenanceRequests[index].stage = .onTheWay
-        } else if maintenanceRequests[index].stage == .onTheWay {
-            maintenanceRequests[index].stage = .complete
-        }
-        // If already complete we do nothing
-    }
-    
-    func book(_ slot: BookingSlot) {
-        // Find slot and mark as booked
-        for index in 0..<bookingSlots.count {
-            if bookingSlots[index].id == slot.id {
-                bookingSlots[index].isBooked = true
-                break
+
+    // MARK: - Firebase maintenance requests
+    // Residents query their own documents; admins query all documents.
+    func startMaintenanceListener() {
+        guard maintenanceListener == nil,
+              onboardingStage == .active || onboardingStage == .admin,
+              let uid = Auth.auth().currentUser?.uid else { return }
+        let collection = Firestore.firestore().collection("maintenanceRequests")
+        let query: Query = onboardingStage == .admin
+            ? collection
+            : collection.whereField("residentId", isEqualTo: uid)
+        maintenanceListener = query.addSnapshotListener { [weak self] snapshot, error in
+            Task { @MainActor [weak self] in
+                guard let self, Auth.auth().currentUser?.uid == uid,
+                      self.onboardingStage == .active || self.onboardingStage == .admin else { return }
+                if let error {
+                    self.maintenanceError = error.localizedDescription
+                    return
+                }
+                self.maintenanceError = nil
+                self.maintenanceRequests = (snapshot?.documents ?? []).compactMap { document in
+                    let data = document.data()
+                    guard let title = data["title"] as? String,
+                          let details = data["details"] as? String,
+                          let unit = data["unit"] as? String,
+                          let residentId = data["residentId"] as? String,
+                          let submittedAt = (data["submittedAt"] as? Timestamp)?.dateValue(),
+                          let stageNumber = data["stage"] as? Int,
+                          let stage = MaintenanceRequest.Stage(rawValue: stageNumber),
+                          let id = UUID(uuidString: document.documentID) else { return nil }
+                    return MaintenanceRequest(id: id, title: title, details: details,
+                                              unit: unit, submittedAt: submittedAt,
+                                              stage: stage, residentId: residentId,
+                                              photoPath: data["photoPath"] as? String)
+                }.sorted { $0.submittedAt > $1.submittedAt }
             }
         }
     }
-    
+
+    func stopMaintenanceListener() {
+        maintenanceListener?.remove()
+        maintenanceListener = nil
+    }
+
+    // Photos are analyzed on-device by Core ML and are never uploaded.
+    // Only resident-reviewed title and description are stored in Firestore.
+    @MainActor
+    func submitMaintenanceRequest(title: String, details: String, photoData: Data?) async throws {
+        guard onboardingStage == .active,
+              let user = Auth.auth().currentUser else {
+            throw NSError(domain: "CommonsApp.Maintenance", code: 401,
+                          userInfo: [NSLocalizedDescriptionKey: "Only approved residents can submit requests."])
+        }
+        let cleanTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanDetails = details.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanTitle.isEmpty, cleanTitle.count <= 120,
+              !cleanDetails.isEmpty, cleanDetails.count <= 2000 else {
+            throw NSError(domain: "CommonsApp.Maintenance", code: 400,
+                          userInfo: [NSLocalizedDescriptionKey: "Check the title and description lengths."])
+        }
+        // Keep the existing method signature so the SwiftUI form is unchanged.
+        // The image remains only in the current on-device form session.
+        _ = photoData
+        let requestId = UUID().uuidString.lowercased()
+        let fields: [String: Any] = [
+            "title": cleanTitle, "details": cleanDetails,
+            "unit": currentResident.unit, "residentId": user.uid,
+            "submittedAt": FieldValue.serverTimestamp(),
+            "updatedAt": FieldValue.serverTimestamp(), "stage": 0
+        ]
+        try await Firestore.firestore().collection("maintenanceRequests")
+            .document(requestId).setData(fields)
+    }
+
+    @MainActor
+    func advanceStage(of request: MaintenanceRequest) async throws {
+        guard onboardingStage == .admin, Auth.auth().currentUser != nil else {
+            throw NSError(domain: "CommonsApp.Maintenance", code: 403,
+                          userInfo: [NSLocalizedDescriptionKey: "Administrator access required."])
+        }
+        guard request.stage != .complete else { return }
+        try await Firestore.firestore().collection("maintenanceRequests")
+            .document(request.id.uuidString.lowercased())
+            .updateData(["stage": request.stage.rawValue + 1,
+                         "updatedAt": FieldValue.serverTimestamp()])
+    }
+
+    // MARK: - Gym reservations. One document per administrator-created slot.
+    // Membership is an array in that document; concurrent changes use transactions.
+    @MainActor
+    func startGymListeners() {
+        guard gymSlotsListener == nil, gymSettingsListener == nil,
+              onboardingStage == .active || onboardingStage == .admin,
+              let uid = Auth.auth().currentUser?.uid else { return }
+        gymSettingsListener = Firestore.firestore().collection("gymSettings")
+            .document("main").addSnapshotListener { [weak self] snapshot, error in
+                Task { @MainActor [weak self] in
+                    guard let self, Auth.auth().currentUser?.uid == uid else { return }
+                    if let error { self.gymError = error.localizedDescription; return }
+                    self.gymCapacity = max(1, snapshot?.data()?["capacity"] as? Int ?? 10)
+                }
+            }
+        gymSlotsListener = Firestore.firestore().collection("gymSlots")
+            .whereField("start", isGreaterThanOrEqualTo: Timestamp(date: Calendar.current.startOfDay(for: Date())))
+            .addSnapshotListener { [weak self] snapshot, error in
+                Task { @MainActor [weak self] in
+                    guard let self, Auth.auth().currentUser?.uid == uid else { return }
+                    if let error { self.gymError = error.localizedDescription; return }
+                    self.gymError = nil
+                    let docs = snapshot?.documents ?? []
+                    self.gymOccupancy = Dictionary(uniqueKeysWithValues: docs.map {
+                        ($0.documentID, ($0.data()["members"] as? [String] ?? []).count)
+                    })
+                    self.gymMembersBySlot = Dictionary(uniqueKeysWithValues: docs.map {
+                        ($0.documentID, $0.data()["members"] as? [String] ?? [])
+                    })
+                    self.gymMySlotIDs = Set(docs.filter {
+                        ($0.data()["members"] as? [String] ?? []).contains(uid)
+                    }.map(\.documentID))
+                    let gymID = self.amenities.first(where: { $0.name == "Gym" })?.id ?? UUID()
+                    self.bookingSlots = docs.compactMap { doc in
+                        guard let start = (doc.data()["start"] as? Timestamp)?.dateValue() else { return nil }
+                        return BookingSlot(amenityID: gymID, start: start, firestoreId: doc.documentID)
+                    }.sorted { $0.start < $1.start }
+                }
+            }
+    }
+
+    func stopGymListeners() {
+        gymSlotsListener?.remove(); gymSlotsListener = nil
+        gymSettingsListener?.remove(); gymSettingsListener = nil
+        gymOccupancy.removeAll(); gymMembersBySlot.removeAll()
+        gymMySlotIDs.removeAll(); bookingSlots.removeAll()
+    }
+
+    @MainActor
+    func setGymCapacity(_ capacity: Int) async throws {
+        guard onboardingStage == .admin, (1...100).contains(capacity) else {
+            throw gymFailure("Administrator access and a capacity of 1–100 are required.")
+        }
+        try await Firestore.firestore().collection("gymSettings")
+            .document("main").setData(["capacity": capacity], merge: true)
+    }
+
+    // Admin creates the next 14 days of hourly slots, 9 AM–8 PM.
+    // Existing slots are never overwritten (preserves reservations).
+    @MainActor
+    func prepareGymSlots() async throws {
+        guard onboardingStage == .admin else { throw gymFailure("Administrator access required.") }
+        let db = Firestore.firestore()
+        let settings = db.collection("gymSettings").document("main")
+        if !(try await settings.getDocument(source: .server)).exists {
+            try await settings.setData(["capacity": 10])
+        }
+        let calendar = Calendar.current
+        let collection = db.collection("gymSlots")
+        let existing = try await collection
+            .whereField("start", isGreaterThanOrEqualTo: Timestamp(date: Date()))
+            .getDocuments(source: .server)
+        let existingIDs = Set(existing.documents.map(\.documentID))
+        let batch = db.batch()
+        var newCount = 0
+        for dayOffset in 0..<14 {
+            guard let day = calendar.date(byAdding: .day, value: dayOffset,
+                                          to: calendar.startOfDay(for: Date())) else { continue }
+            for hour in 9..<21 {
+                guard let start = calendar.date(bySettingHour: hour, minute: 0, second: 0, of: day),
+                      start > Date() else { continue }
+                let key = gymSlotKey(start)
+                guard !existingIDs.contains(key) else { continue }
+                batch.setData([
+                    "start": Timestamp(date: start), "members": [String](),
+                    "updatedAt": FieldValue.serverTimestamp()
+                ], forDocument: collection.document(key))
+                newCount += 1
+            }
+        }
+        if newCount > 0 { try await batch.commit() }
+    }
+
+    // Locale-independent document key shared by all devices.
+    private func gymSlotKey(_ date: Date) -> String {
+        let f = DateFormatter(); f.locale = Locale(identifier: "en_US_POSIX")
+        f.timeZone = TimeZone(identifier: "Asia/Colombo")
+        f.dateFormat = "yyyyMMddHH"
+        return f.string(from: date)
+    }
+
+    @MainActor
+    func reserveGymSlot(_ slot: BookingSlot, cancel: Bool = false) async throws {
+        guard onboardingStage == .active, let uid = Auth.auth().currentUser?.uid,
+              let id = slot.firestoreId, slot.start > Date() else {
+            throw gymFailure("Please choose a future Gym slot while signed in as a resident.")
+        }
+        let db = Firestore.firestore()
+        let ref = db.collection("gymSlots").document(id)
+        let config = db.collection("gymSettings").document("main")
+        _ = try await db.runTransaction { transaction, errorPointer -> Any? in
+            do {
+                let setting = try transaction.getDocument(config)
+                let snap = try transaction.getDocument(ref)
+                guard let data = snap.data(),
+                      let members = data["members"] as? [String],
+                      let start = (data["start"] as? Timestamp)?.dateValue(),
+                      start > Date() else { throw self.gymFailure("This slot is no longer available.") }
+                let capacity = setting.data()?["capacity"] as? Int ?? 0
+                var next = members
+                if cancel {
+                    guard members.contains(uid) else { throw self.gymFailure("No reservation to cancel.") }
+                    next.removeAll { $0 == uid }
+                } else {
+                    guard !members.contains(uid) else { throw self.gymFailure("You already booked this slot.") }
+                    guard members.count < capacity else { throw self.gymFailure("This Gym slot is full.") }
+                    next.append(uid)
+                }
+                transaction.updateData([
+                    "members": next, "updatedAt": FieldValue.serverTimestamp()
+                ], forDocument: ref)
+                return nil
+            } catch {
+                errorPointer?.pointee = error as NSError
+                return nil
+            }
+        }
+    }
+
     func getSlots(for amenity: Amenity) -> [BookingSlot] {
-        // Go through all slots and return only the ones
-        // that belong to this amenity
-        var result: [BookingSlot] = []
-        for slot in bookingSlots {
-            if slot.amenityID == amenity.id {
-                result.append(slot)
-            }
-        }
-        return result
+        guard amenity.name == "Gym" else { return [] }
+        return bookingSlots.filter { $0.amenityID == amenity.id && $0.start > Date() }
     }
-    
+
+    private func gymFailure(_ message: String) -> NSError {
+        NSError(domain: "CommonsApp.Gym", code: 400,
+                userInfo: [NSLocalizedDescriptionKey: message])
+    }
+
     //Chat
-    
+
     func send(text: String, in thread: ChatThread) {
         let messageText = text.trimmingCharacters(in: .whitespacesAndNewlines)
 
@@ -1108,12 +1580,12 @@ final class AppStore: ObservableObject {
                 }
             }
     }
-    
+
     //Sample Data Setup
-    
+
     private func seedSampleData() {
         let now = Date()
-        
+
         //Create sample posts
         posts = [
             Post(
@@ -1121,7 +1593,7 @@ final class AppStore: ObservableObject {
                 authorUnit: "—",
                 timestamp: now,
                 category: .announcement,
-                text: "Water shut off Tuesday 10am–2pm. Building-wide maintenance on the 3rd floor line.",
+                text: "",
                 isPinned: true
             ),
             Post(
@@ -1145,38 +1617,28 @@ final class AppStore: ObservableObject {
                 replyCount: 3
             )
         ]
-        
+
         // Firestore provides shared items for approved residents.
         items = []
-        
-        //Create sample events
-        events = [
-            BuildingEvent(title: "Rooftop Sunset Social", date: now, location: "Rooftop Terrace", attendeeCount: 18, isGoing: true),
-            BuildingEvent(title: "HOA Monthly Meeting", date: now, location: "Community Room", attendeeCount: 9)
-        ]
-        
+
+        // Events are loaded from Firestore.
+        events = []
+
         //Create sample maintenance request
-        maintenanceRequests = [
-            MaintenanceRequest(title: "Kitchen faucet leak", details: "Slow drip under the handle.", unit: "4B", submittedAt: now, stage: .onTheWay)
-        ]
-        
+        maintenanceRequests = []
+
         //Create sample amenities
-        amenities = [
-            Amenity(name: "Gym", subtitle: "Open now"),
-            Amenity(name: "Community Room", subtitle: "3 slots today"),
-            Amenity(name: "Guest Suite", subtitle: "Book ahead")
-        ]
-        
-        seedBookingSlots()
-        
+        amenities = [Amenity(name: "Gym", subtitle: "Reserve your workout time")]
+        bookingSlots = []
+
         //Create sample pending residents
         pendingResidents = [
             PendingResident(id: "demo-priya", name: "Priya Nair", unit: "4B", requestedAt: now),
             PendingResident(id: "demo-tom", name: "Tom Alcott", unit: "11D", requestedAt: now)
         ]
-        
-        pinnedAnnouncementText = "Water shut off Tuesday, 10am–2pm."
-        
+
+        pinnedAnnouncementText = ""
+
         //Create offline cache items
         offlineCache = [
             OfflineCacheItem(label: "Door entry codes", isCached: true, lastSynced: now),
@@ -1185,40 +1647,7 @@ final class AppStore: ObservableObject {
             OfflineCacheItem(label: "Photos & attachments", isCached: false, lastSynced: nil)
         ]
     }
-    
-    private func seedBookingSlots() {
-        // Find Community Room by name instead of guessing the index
-        var communityRoom: Amenity? = nil
-        for amenity in amenities {
-            if amenity.name == "Community Room" {
-                communityRoom = amenity
-                break
-            }
-        }
 
-        // If we didn't find it, stop here
-        if communityRoom == nil { return }
-
-        let cal = Calendar.current
-        // Start at 9am today
-        let base = cal.date(bySettingHour: 9, minute: 0, second: 0, of: Date())!
-
-        bookingSlots = []
-        for index in 0..<10 {
-            let isSlotBooked = (index == 2 || index == 5 || index == 8)
-
-            // Each slot is 1 hour apart
-            let slotTime = cal.date(byAdding: .hour, value: index, to: base)!
-
-            let slot = BookingSlot(
-                amenityID: communityRoom!.id,
-                start: slotTime,
-                isBooked: isSlotBooked
-            )
-            bookingSlots.append(slot)
-        }
-    }
-    
     //App Lock (Face ID / Touch ID)
 
     func lockApp() {
@@ -1227,7 +1656,7 @@ final class AppStore: ObservableObject {
             isLocked = true
         }
     }
-    
+
     func saveDataForWidget() {
         // We use UserDefaults with our App Group to share data
         // with the widget extension
@@ -1273,7 +1702,7 @@ final class AppStore: ObservableObject {
             completion(false)
         }
     }
-    
+
     func pinAnnouncement(_ text: String) {
         // Update pinned text
         pinnedAnnouncementText = text
@@ -1355,10 +1784,10 @@ final class AppStore: ObservableObject {
         let snapshot = try await Firestore.firestore()
             .collection("announcements")
             .order(by: "createdAt", descending: true)
-            .limit(to: 1)
+            .limit(to: 50)
             .getDocuments()
 
-        guard let document = snapshot.documents.first,
+        guard let document = snapshot.documents.first(where: { $0.data()["isPinned"] as? Bool != false }),
               let text = document.data()["text"] as? String,
               !text.isEmpty else {
             return
@@ -1394,7 +1823,7 @@ final class AppStore: ObservableObject {
         announcementListener = Firestore.firestore()
             .collection("announcements")
             .order(by: "createdAt", descending: true)
-            .limit(to: 1)
+            .limit(to: 50)
             .addSnapshotListener { [weak self] snapshot, error in
 
                 if let error = error {
@@ -1402,32 +1831,38 @@ final class AppStore: ObservableObject {
                     return
                 }
 
-                guard let document = snapshot?.documents.first,
-                      let text = document.data()["text"] as? String else {
-                    return
+                guard let documents = snapshot?.documents else { return }
+                let pinned = documents.first { $0.data()["isPinned"] as? Bool != false }
+                let notices: [Post] = documents.compactMap { document in
+                    let data = document.data()
+                    guard data["eventAction"] as? String != nil,
+                          let message = data["text"] as? String else { return nil }
+                    return Post(
+                        authorName: "Management", authorUnit: "",
+                        timestamp: (data["createdAt"] as? Timestamp)?.dateValue() ?? Date(),
+                        category: .announcement, text: message
+                    )
                 }
-
-                let timestamp = (document.data()["createdAt"] as? Timestamp)?
-                    .dateValue() ?? Date()
-
                 Task { @MainActor in
                     guard let self = self else { return }
-
-                    self.pinnedAnnouncementText = text
-
-                    let announcementPost = Post(
-                        authorName: "Management",
-                        authorUnit: "—",
-                        timestamp: timestamp,
-                        category: .announcement,
-                        text: text,
-                        isPinned: true
-                    )
-
-                    self.posts.removeAll { $0.isPinned }
-                    self.posts.insert(announcementPost, at: 0)
-
-                    self.saveDataForWidget()
+                    self.eventNoticePosts = notices
+                    if let pinned,
+                       let message = pinned.data()["text"] as? String {
+                        let timestamp = (pinned.data()["createdAt"] as? Timestamp)?
+                            .dateValue() ?? Date()
+                        self.pinnedAnnouncementText = message
+                        let announcementPost = Post(
+                            authorName: "Management", authorUnit: "—",
+                            timestamp: timestamp, category: .announcement,
+                            text: message, isPinned: true
+                        )
+                        self.posts.removeAll { $0.isPinned }
+                        self.posts.insert(announcementPost, at: 0)
+                        self.saveDataForWidget()
+                    } else {
+                        self.pinnedAnnouncementText = ""
+                        self.posts.removeAll { $0.isPinned }
+                    }
                 }
             }
     }

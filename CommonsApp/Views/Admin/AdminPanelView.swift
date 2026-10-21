@@ -1,339 +1,169 @@
-//
-//  AdminPanelView.swift
-//  CommonsApp
-//
-//  Created by Sohan Weerasinghe on 21/9/2026.
-//
-
 import SwiftUI
 
+enum AdminPalette {
+    static let ink = Color(red: 0.10, green: 0.14, blue: 0.26)
+    static let muted = Color(red: 0.44, green: 0.49, blue: 0.60)
+    static let purple = Color(red: 0.40, green: 0.32, blue: 0.87)
+    static let background = Color(red: 0.965, green: 0.970, blue: 0.985)
+    static let border = Color(red: 0.90, green: 0.92, blue: 0.95)
+}
+
 struct AdminPanelView: View {
-    
     @EnvironmentObject var store: AppStore
-    
-    // Holds the text typed into the announcement box
-    @State private var announcementText = ""
-    
-    // Shows a confirmation message after pinning
-    @State private var didPin = false
-    @State private var isLoadingResidents = false
-    @State private var residentsError = ""
-    @State private var processingResidentID: String? = nil
-    @State private var isSavingAnnouncement = false
-    @State private var announcementError = ""
-    
+
     var body: some View {
-        ZStack {
-            Theme.paper.ignoresSafeArea()
-            
+        NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 24) {
-                    
-                    // MARK: Pending residents section
-                    VStack(alignment: .leading, spacing: 12) {
-                        
-                        SectionHeader(title: "Pending Verification")
-                        
-                        // Empty state
-                        if store.pendingResidents.isEmpty {
-                            PlaqueCard {
-                                HStack(spacing: 12) {
-                                    Image(systemName: "checkmark.seal.fill")
-                                        .foregroundStyle(Theme.sage)
-                                        .font(.system(size: 24))
-                                    
-                                    Text("All residents verified")
-                                        .font(Theme.ui(14))
-                                        .foregroundStyle(Theme.textMuted)
-                                }
-                            }
-                            
-                        } else {
-                            
-                            ForEach(store.pendingResidents) { resident in
-                                PlaqueCard {
-                                    VStack(alignment: .leading, spacing: 6) {
-                                        Text(resident.name)
-                                            .font(Theme.ui(15, weight: .semibold))
-                                            .foregroundStyle(Theme.textPrimary)
-
-                                        Text("Unit: \(resident.unit)")
-                                            .font(Theme.ui(13))
-                                            .foregroundStyle(Theme.textMuted)
-
-                                        Text("Application pending")
-                                            .font(Theme.ui(12))
-
-                                            .foregroundStyle(Theme.textMuted)
-
-                                        //Approve decline buttons for pending residents
-                                        HStack(spacing: 12) {
-                                            Button("Approve") {
-                                                guard processingResidentID == nil else { return }
-
-                                                processingResidentID = resident.id
-                                                residentsError = ""
-
-                                                Task {
-                                                    defer { processingResidentID = nil }
-
-                                                    do {
-                                                        try await store.updateResidentApproval(
-                                                            residentID: resident.id,
-                                                            approve: true
-                                                        )
-                                                    } catch {
-                                                        residentsError = error.localizedDescription
-                                                    }
-                                                }
-                                            }
-                                            .buttonStyle(.borderedProminent)
-                                            .tint(.green)
-                                            .disabled(processingResidentID != nil)
-
-                                            Button("Decline") {
-                                                guard processingResidentID == nil else { return }
-
-                                                processingResidentID = resident.id
-                                                residentsError = ""
-
-                                                Task {
-                                                    defer { processingResidentID = nil }
-
-                                                    do {
-                                                        try await store.updateResidentApproval(
-                                                            residentID: resident.id,
-                                                            approve: false
-                                                        )
-                                                    } catch {
-                                                        residentsError = error.localizedDescription
-                                                    }
-                                                }
-                                            }
-                                            .buttonStyle(.bordered)
-                                            .tint(.red)
-                                            .disabled(processingResidentID != nil)
-
-                                            if processingResidentID == resident.id {
-                                                ProgressView()
-                                            }
-                                        }
-                                        .padding(.top, 8)
-                                    }
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                                }
-                                if isLoadingResidents {
-                                    ProgressView("Loading resident applications...")
-                                }
-
-                                if !residentsError.isEmpty {
-                                    Text(residentsError)
-                                        .font(.caption)
-                                        .foregroundStyle(.red)
-                                }
-                            }
+                VStack(alignment: .leading, spacing: 18) {
+                    dashboardHeader
+                    dashboardOverview
+                    Text("Manage building")
+                        .font(.system(size: 19, weight: .bold, design: .rounded))
+                        .foregroundStyle(AdminPalette.ink)
+                    NavigationLink { AdminMaintenanceView().environmentObject(store) } label: {
+                        HStack(spacing: 14) {
+                            Image(systemName: "wrench.and.screwdriver")
+                                .font(.system(size: 20, weight: .semibold))
+                                .foregroundStyle(AdminPalette.purple)
+                                .frame(width: 44, height: 44)
+                                .background(AdminPalette.purple.opacity(0.10), in: RoundedRectangle(cornerRadius: 13))
+                            Text("Maintenance Requests")
+                                .font(.system(size: 16, weight: .semibold))
+                                .foregroundStyle(AdminPalette.ink)
+                            Spacer()
+                            Image(systemName: "chevron.right").foregroundStyle(AdminPalette.muted)
                         }
+                        .padding(14)
+                        .background(.white, in: RoundedRectangle(cornerRadius: 18))
                     }
-                    
-                    // MARK: Pin announcement section
-                    VStack(alignment: .leading, spacing: 12) {
-                        
-                        SectionHeader(title: "Pin Announcement")
-                        
-                        PlaqueCard {
-                            VStack(alignment: .leading, spacing: 14) {
-                                
-                                // Current pinned announcement
-                                if !store.pinnedAnnouncementText.isEmpty {
-                                    VStack(alignment: .leading, spacing: 6) {
-                                        Text("CURRENTLY PINNED")
-                                            .font(Theme.ui(10, weight: .semibold))
-                                            .foregroundStyle(Theme.textMuted)
-                                        
-                                        Text(store.pinnedAnnouncementText)
-                                            .font(Theme.ui(13))
-                                            .foregroundStyle(Theme.textPrimary)
-                                    }
-                                    .padding(12)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                                    .background(Theme.clay.opacity(0.1))
-                                    .clipShape(RoundedRectangle(cornerRadius: 8))
-                                    
-                                    Divider()
-                                }
-                                
-                                // New announcement text box
-                                Text("NEW ANNOUNCEMENT")
-                                    .font(Theme.ui(10, weight: .semibold))
-                                    .foregroundStyle(Theme.textMuted)
-                                
-                                TextEditor(text: $announcementText)
-                                    .frame(height: 100)
-                                    .padding(8)
-                                    .scrollContentBackground(.hidden)
-                                    .background(Theme.paper)
-                                    .clipShape(RoundedRectangle(cornerRadius: 8))
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 8)
-                                            .stroke(Theme.hairline, lineWidth: 1)
-                                    )
-                                
-                                // Pin button
-                                Button {
-                                    pinAnnouncement()
-                                } label: {
-                                    HStack(spacing: 8) {
-                                        if isSavingAnnouncement {
-                                            ProgressView()
-                                        }
-
-                                        Text(isSavingAnnouncement ? "Saving..." : "Pin to Building Wall")
-                                    }
-                                }
-                                .buttonStyle(PrimaryButtonStyle())
-                                .disabled(
-                                    isSavingAnnouncement ||
-                                    announcementText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                                )
-                                .opacity(
-                                    isSavingAnnouncement ||
-                                    announcementText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                                    ? 0.5 : 1
-                                )
-
-                                if !announcementError.isEmpty {
-                                    Text(announcementError)
-                                        .font(Theme.ui(12))
-                                        .foregroundStyle(.red)
-                                }
-                                
-                                // Success confirmation
-                                if didPin {
-                                    HStack(spacing: 6) {
-                                        Image(systemName: "checkmark.circle.fill")
-                                            .foregroundStyle(Theme.sage)
-                                        Text("Pinned to the Building Wall")
-                                            .font(Theme.ui(13))
-                                            .foregroundStyle(Theme.sage)
-                                    }
-                                }
-                            }
+                    .buttonStyle(.plain)
+                    NavigationLink { AdminGymManagementView().environmentObject(store) } label: {
+                        HStack(spacing: 14) {
+                            Image(systemName: "figure.strengthtraining.traditional")
+                                .font(.system(size: 20, weight: .semibold))
+                                .foregroundStyle(AdminPalette.purple)
+                                .frame(width: 44, height: 44)
+                                .background(AdminPalette.purple.opacity(0.10), in: RoundedRectangle(cornerRadius: 13))
+                            Text("Gym Management")
+                                .font(.system(size: 16, weight: .semibold))
+                                .foregroundStyle(AdminPalette.ink)
+                            Spacer()
+                            Image(systemName: "chevron.right").foregroundStyle(AdminPalette.muted)
                         }
+                        .padding(14)
+                        .background(.white, in: RoundedRectangle(cornerRadius: 18))
                     }
-                    
-                    // MARK: Building stats section
-                    VStack(alignment: .leading, spacing: 12) {
-                        
-                        SectionHeader(title: "Building Overview")
-                        
-                        // Stats in a 2 column grid
-                        LazyVGrid(
-                            columns: [
-                                GridItem(.flexible()),
-                                GridItem(.flexible())
-                            ],
-                            spacing: 12
-                        ) {
-                            StatCard(
-                                number: "\(store.chatThreads.count)",
-                                label: "Active Chats"
-                            )
-                            StatCard(
-                                number: "\(store.events.count)",
-                                label: "Upcoming Events"
-                            )
-                            StatCard(
-                                number: "\(store.maintenanceRequests.count)",
-                                label: "Open Requests"
-                            )
-                            StatCard(
-                                number: "\(store.items.count)",
-                                label: "Shared Items"
-                            )
+                    .buttonStyle(.plain)
+                    NavigationLink { AdminResidentVerificationView().environmentObject(store) } label: {
+                        HStack(spacing: 14) {
+                            Image(systemName: "person.crop.circle.badge.checkmark")
+                                .font(.system(size: 20, weight: .semibold))
+                                .foregroundStyle(AdminPalette.purple)
+                                .frame(width: 44, height: 44)
+                                .background(AdminPalette.purple.opacity(0.10), in: RoundedRectangle(cornerRadius: 13))
+                            Text("Resident Verification")
+                                .font(.system(size: 16, weight: .semibold))
+                                .foregroundStyle(AdminPalette.ink)
+                            Spacer()
+                            Image(systemName: "chevron.right").foregroundStyle(AdminPalette.muted)
                         }
+                        .padding(14)
+                        .background(.white, in: RoundedRectangle(cornerRadius: 18))
                     }
+                    .buttonStyle(.plain)
+                    NavigationLink { AdminAnnouncementsView().environmentObject(store) } label: {
+                        HStack(spacing: 14) {
+                            Image(systemName: "megaphone")
+                                .font(.system(size: 20, weight: .semibold))
+                                .foregroundStyle(AdminPalette.purple)
+                                .frame(width: 44, height: 44)
+                                .background(AdminPalette.purple.opacity(0.10), in: RoundedRectangle(cornerRadius: 13))
+                            Text("Announcements")
+                                .font(.system(size: 16, weight: .semibold))
+                                .foregroundStyle(AdminPalette.ink)
+                            Spacer()
+                            Image(systemName: "chevron.right").foregroundStyle(AdminPalette.muted)
+                        }
+                        .padding(14)
+                        .background(.white, in: RoundedRectangle(cornerRadius: 18))
+                    }
+                    .buttonStyle(.plain)
+                    NavigationLink { AdminEventsView().environmentObject(store) } label: {
+                        HStack(spacing: 14) {
+                            Image(systemName: "calendar")
+                                .font(.system(size: 20, weight: .semibold))
+                                .foregroundStyle(AdminPalette.purple)
+                                .frame(width: 44, height: 44)
+                                .background(AdminPalette.purple.opacity(0.10), in: RoundedRectangle(cornerRadius: 13))
+                            Text("Manage Events")
+                                .font(.system(size: 16, weight: .semibold))
+                                .foregroundStyle(AdminPalette.ink)
+                            Spacer()
+                            Image(systemName: "chevron.right").foregroundStyle(AdminPalette.muted)
+                        }
+                        .padding(14)
+                        .background(.white, in: RoundedRectangle(cornerRadius: 18))
+                    }
+                    .buttonStyle(.plain)
                 }
-                .padding(16)
+                .padding(.horizontal, 18)
+                .padding(.vertical, 24)
             }
+            .background(AdminPalette.background.ignoresSafeArea())
+            .navigationTitle("Admin Dashboard")
+            .navigationBarTitleDisplayMode(.inline)
         }
-        .navigationTitle("Admin Panel")
-        .navigationBarTitleDisplayMode(.large)
-        .task {
-            isLoadingResidents = true
-            residentsError = ""
-
-            // Clear sample residents before loading real applications.
-            store.pendingResidents = []
-
-            defer {
-                isLoadingResidents = false
+    }
+    private var dashboardHeader: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "building.2.crop.circle.fill")
+                .font(.system(size: 35))
+                .foregroundStyle(AdminPalette.purple)
+                .frame(width: 54, height: 54)
+                .background(.white, in: RoundedRectangle(cornerRadius: 17))
+            VStack(alignment: .leading, spacing: 3) {
+                Text("Admin Dashboard")
+                    .font(.system(size: 25, weight: .bold, design: .rounded))
+                    .foregroundStyle(AdminPalette.ink)
+                Text("Manage your community")
+                    .font(.system(size: 13))
+                    .foregroundStyle(AdminPalette.muted)
             }
-
-            do {
-                try await store.loadPendingResidents()
-            } catch {
-                residentsError = error.localizedDescription
+            Spacer(minLength: 0)
+        }
+    }
+    private var dashboardOverview: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Building Overview")
+                .font(.system(size: 19, weight: .bold, design: .rounded))
+                .foregroundStyle(AdminPalette.ink)
+            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
+                metric("Active Chats", store.chatThreads.count, "bubble.left.and.bubble.right.fill", .blue)
+                metric("Upcoming Events", store.events.filter { !$0.isCancelled && $0.date >= Date() }.count, "calendar", AdminPalette.purple)
+                metric("Open Requests", store.maintenanceRequests.count, "wrench.and.screwdriver.fill", .orange)
+                metric("Shared Items", store.items.count, "shippingbox.fill", .green)
             }
         }
     }
-    
-    // Pins the announcement to the building wall
-    func pinAnnouncement() {
-        let text = announcementText.trimmingCharacters(
-            in: .whitespacesAndNewlines
-        )
-
-        guard !text.isEmpty, !isSavingAnnouncement else { return }
-
-        isSavingAnnouncement = true
-        announcementError = ""
-        didPin = false
-
-        Task {
-            defer {
-                isSavingAnnouncement = false
-            }
-
-            do {
-                try await store.saveAnnouncementToFirestore(text)
-
-                // Preserve the existing Building Wall and widget behavior.
-                store.pinAnnouncement(text)
-
-                didPin = true
-                announcementText = ""
-
-            } catch {
-                announcementError = error.localizedDescription
-            }
+    private func metric(_ label: String, _ count: Int, _ symbol: String, _ tint: Color) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Image(systemName: symbol)
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(tint)
+                .frame(width: 38, height: 38)
+                .background(tint.opacity(0.10), in: RoundedRectangle(cornerRadius: 12))
+            Text("\(count)")
+                .font(.system(size: 30, weight: .bold, design: .rounded))
+                .foregroundStyle(AdminPalette.ink)
+            Text(label)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(AdminPalette.muted)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
         }
-    }
-    
-    // Small stat box showing a number and a label
-    private struct StatCard: View {
-        
-        let number: String
-        let label: String
-        
-        var body: some View {
-            VStack(spacing: 6) {
-                Text(number)
-                    .font(Theme.display(28))
-                    .foregroundStyle(Theme.brass)
-                
-                Text(label)
-                    .font(Theme.ui(11.5))
-                    .foregroundStyle(Theme.textMuted)
-                    .multilineTextAlignment(.center)
-            }
-            .frame(maxWidth: .infinity)
-            .padding(16)
-            .background(Theme.card)
-            .clipShape(RoundedRectangle(cornerRadius: Theme.cardRadius))
-            .overlay(
-                RoundedRectangle(cornerRadius: Theme.cardRadius)
-                    .stroke(Theme.hairline, lineWidth: 1)
-            )
-        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(16)
+        .background(.white, in: RoundedRectangle(cornerRadius: 20))
+        .overlay(RoundedRectangle(cornerRadius: 20).stroke(AdminPalette.border))
     }
 }

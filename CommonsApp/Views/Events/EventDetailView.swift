@@ -11,6 +11,19 @@ struct EventDetailView: View {
 
     @EnvironmentObject var store: AppStore
     let event: BuildingEvent
+    @State private var showEditEvent = false
+    @State private var showCancelConfirmation = false
+    @State private var adminError: String?
+
+    private var currentEvent: BuildingEvent {
+        guard let firestoreId = event.firestoreId else {
+            return event
+        }
+
+        return store.events.first {
+            $0.firestoreId == firestoreId
+        } ?? event
+    }
 
     var body: some View {
         ZStack {
@@ -25,7 +38,7 @@ struct EventDetailView: View {
                 VStack(alignment: .leading, spacing: 0) {
 
                     // Location label
-                    Text(event.location.uppercased())
+                    Text(currentEvent.location.uppercased())
                         .font(Theme.ui(10, weight: .bold))
                         .foregroundStyle(Theme.appMuted)
                         .padding(.top, 12)
@@ -37,7 +50,7 @@ struct EventDetailView: View {
                         .padding(.top, 12)
 
                     // Event title
-                    Text(event.title)
+                    Text(currentEvent.title)
                         .font(Theme.display(28, weight: .bold))
                         .foregroundStyle(Theme.appNavy)
                         .padding(.top, 22)
@@ -59,7 +72,7 @@ struct EventDetailView: View {
                                 .font(.system(size: 14, weight: .semibold))
                                 .foregroundStyle(Theme.appPurple)
 
-                            Text(event.location)
+                            Text(currentEvent.location)
                                 .font(Theme.ui(13, weight: .medium))
                                 .foregroundStyle(Theme.appNavy)
                         }
@@ -69,32 +82,46 @@ struct EventDetailView: View {
                     Divider()
                         .padding(.vertical, 22)
 
+                    if !currentEvent.description.isEmpty {
+                        Text(currentEvent.description)
+                            .font(Theme.ui(14))
+                            .foregroundStyle(Theme.appNavy)
+                            .padding(.bottom, 18)
+                    }
+
                     // Attendees
                     HStack {
                         VStack(alignment: .leading, spacing: 8) {
-                            Text("\(event.attendeeCount) GOING")
+                            Text("\(currentEvent.attendeeCount) GOING")
                                 .font(Theme.ui(10, weight: .bold))
                                 .foregroundStyle(Theme.appMuted)
 
-                            AttendeeAvatars(count: event.attendeeCount)
+                            Label(
+                                "\(currentEvent.attendeeCount) resident\(currentEvent.attendeeCount == 1 ? "" : "s") attending",
+                                systemImage: "person.2.fill"
+                            )
+                            .font(Theme.ui(13, weight: .medium))
+                            .foregroundStyle(Theme.appPurple)
                         }
 
                         Spacer()
                     }
 
                     // RSVP button
-                    if event.allowsRSVP {
+                    if currentEvent.allowsRSVP &&
+                       !currentEvent.isCancelled &&
+                       currentEvent.date > Date() {
                         Button {
-                            store.toggleRSVP(for: event)
+                            store.toggleRSVP(for: currentEvent)
                         } label: {
                             HStack(spacing: 8) {
-                                Image(systemName: event.isGoing ? "checkmark" : "person.badge.plus")
+                                Image(systemName: currentEvent.isGoing ? "checkmark" : "person.badge.plus")
                                     .font(.system(size: 14, weight: .bold))
 
-                                if event.isGoing {
-                                    Text("I'm Going · \(event.attendeeCount) attending")
+                                if currentEvent.isGoing {
+                                    Text("I'm Going · \(currentEvent.attendeeCount) attending")
                                 } else {
-                                    Text("RSVP · \(event.attendeeCount) attending")
+                                    Text("RSVP · \(currentEvent.attendeeCount) attending")
                                 }
                             }
                             .font(Theme.ui(14, weight: .bold))
@@ -108,48 +135,29 @@ struct EventDetailView: View {
                         .padding(.top, 24)
                     }
 
-                    // Add to Calendar
-                    Button {
-                        // Calendar export can be connected later.
-                    } label: {
-                        HStack(spacing: 12) {
-                            ZStack {
-                                Circle()
-                                    .fill(Theme.appPurpleSoft)
-                                    .frame(width: 42, height: 42)
-
-                                Image(systemName: "calendar.badge.plus")
-                                    .font(.system(size: 16, weight: .semibold))
-                                    .foregroundStyle(Theme.appPurple)
-                            }
-
-                            VStack(alignment: .leading, spacing: 3) {
-                                Text("Add to Calendar")
-                                    .font(Theme.ui(14, weight: .bold))
-                                    .foregroundStyle(Theme.appNavy)
-
-                                Text("Export to iOS Calendar")
-                                    .font(Theme.ui(11))
-                                    .foregroundStyle(Theme.appMuted)
-                            }
-
-                            Spacer()
-
-                            Image(systemName: "chevron.right")
-                                .font(.system(size: 12, weight: .semibold))
-                                .foregroundStyle(Theme.appMuted)
-                        }
-                        .padding(.horizontal, 14)
-                        .frame(height: 70)
-                        .background(Theme.card)
-                        .clipShape(RoundedRectangle(cornerRadius: 18))
-                        .overlay {
-                            RoundedRectangle(cornerRadius: 18)
-                                .stroke(Theme.appBorder, lineWidth: 1)
-                        }
+                    if currentEvent.isCancelled {
+                        Label("Event cancelled", systemImage: "xmark.circle.fill")
+                            .foregroundStyle(.red)
+                            .padding(.top, 20)
                     }
-                    .buttonStyle(.plain)
-                    .padding(.top, 14)
+                    if store.onboardingStage == .admin && !currentEvent.isCancelled {
+                        HStack(spacing: 16) {
+                            Button("Edit Event") { showEditEvent = true }
+                            Button("Cancel Event", role: .destructive) {
+                                showCancelConfirmation = true
+                            }
+                        }
+                        .padding(.top, 20)
+                    }
+                    if let adminError {
+                        Text(adminError).foregroundStyle(.red)
+                            .font(.footnote).padding(.top, 8)
+                    }
+                    if let eventsError = store.eventsError {
+                        Text(eventsError).foregroundStyle(.red)
+                            .font(.footnote).padding(.top, 8)
+                    }
+
                 }
                 .padding(.horizontal, 20)
                 .padding(.bottom, 40)
@@ -157,13 +165,27 @@ struct EventDetailView: View {
             .scrollIndicators(.hidden)
         }
         .navigationTitle("Event")
+        .sheet(isPresented: $showEditEvent) {
+            NavigationStack { CommunityEventEditor(existing: currentEvent) }
+                .environmentObject(store)
+        }
+        .confirmationDialog("Cancel this event?", isPresented: $showCancelConfirmation) {
+            Button("Cancel Event", role: .destructive) {
+                Task { @MainActor in
+                    do { try await store.cancelCommunityEvent(currentEvent) }
+                    catch { adminError = error.localizedDescription }
+                }
+            }
+        } message: {
+            Text("Residents will see this event as cancelled. This cannot be undone.")
+        }
         .navigationBarTitleDisplayMode(.inline)
     }
 
     func dateAndTimeText() -> String {
         let formatter = DateFormatter()
         formatter.dateFormat = "EEE, MMM d · h:mm a"
-        return formatter.string(from: event.date)
+        return formatter.string(from: currentEvent.date)
     }
 }
 

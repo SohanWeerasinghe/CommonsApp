@@ -1,20 +1,15 @@
 rules_version = '2';
-
 service cloud.firestore {
   match /databases/{database}/documents {
-
     match /users/{userId} {
-
       function isOwner() {
         return request.auth != null
           && request.auth.uid == userId;
       }
-
       function isAdmin() {
         return request.auth != null
           && request.auth.token.get('admin', false) == true;
       }
-
       allow create: if isOwner()
         && !isAdmin()
         && request.resource.data.keys().hasOnly([
@@ -36,9 +31,7 @@ service cloud.firestore {
         && request.resource.data.contactPreference is string
         && request.resource.data.showUnitToNeighbors is bool
         && request.resource.data.createdAt == request.time;
-
       allow read: if isOwner() || isAdmin();
-
       allow update: if (
         isOwner()
         && !isAdmin()
@@ -55,42 +48,31 @@ service cloud.firestore {
           'pending', 'approved', 'declined'
         ]
       );
-
       allow delete: if false;
     }
-
-
     match /residentDirectory/{residentId} {
-
       function isApprovedResident() {
         return request.auth != null
           && exists(/databases/$(database)/documents/users/$(request.auth.uid))
           && get(/databases/$(database)/documents/users/$(request.auth.uid))
             .data.approvalStatus == 'approved';
       }
-
       allow get, list: if isApprovedResident();
-
       // Directory entries are maintained by a trusted backend.
       allow create, update, delete: if false;
     }
-
     match /announcements/{announcementId} {
-
       function isAdmin() {
         return request.auth != null
           && request.auth.token.get('admin', false) == true;
       }
-
       function isApprovedResident() {
         return request.auth != null
           && exists(/databases/$(database)/documents/users/$(request.auth.uid))
           && get(/databases/$(database)/documents/users/$(request.auth.uid))
             .data.approvalStatus == 'approved';
       }
-
       allow read: if isAdmin() || isApprovedResident();
-
       allow create: if isAdmin()
         && request.resource.data.keys().hasOnly([
           'text', 'createdAt', 'createdBy', 'isPinned'
@@ -104,38 +86,71 @@ service cloud.firestore {
         && request.resource.data.createdBy == request.auth.uid
         && request.resource.data.createdAt == request.time
         && request.resource.data.isPinned == true;
-
+      // Event lifecycle announcements are created by the admin in the
+      // same atomic batch as the corresponding event write.
+      function validEventNotice() {
+        let d = request.resource.data;
+        let eventPath = /databases/$(database)/documents/events/$(d.eventId);
+        let nextEvent = getAfter(eventPath).data;
+        return d.keys().hasOnly([
+            'text', 'createdAt', 'createdBy', 'isPinned',
+            'eventId', 'eventAction'
+          ])
+          && d.keys().hasAll([
+            'text', 'createdAt', 'createdBy', 'isPinned',
+            'eventId', 'eventAction'
+          ])
+          && d.text is string
+          && d.text.size() > 0
+          && d.text.size() <= 2000
+          && d.createdBy == request.auth.uid
+          && d.createdAt == request.time
+          && d.isPinned == false
+          && d.eventId is string
+          && d.eventId.size() > 0
+          && d.eventAction in ['created', 'updated', 'cancelled']
+          && existsAfter(eventPath)
+          && nextEvent.createdBy == request.auth.uid
+          && nextEvent.updatedAt == request.time
+          && (
+            (d.eventAction == 'created'
+              && !exists(eventPath)
+              && nextEvent.status == 'active')
+            || (d.eventAction == 'updated'
+              && exists(eventPath)
+              && get(eventPath).data.status == 'active'
+              && nextEvent.status == 'active')
+            || (d.eventAction == 'cancelled'
+              && exists(eventPath)
+              && get(eventPath).data.status == 'active'
+              && nextEvent.status == 'cancelled')
+          );
+      }
+      allow create: if isAdmin() && validEventNotice();
       allow update, delete: if false;
     }
-
    match /posts/{postId} {
-
   function isAdmin() {
     return request.auth != null
       && request.auth.token.get('admin', false) == true;
   }
-
   function isApprovedResident() {
     return request.auth != null
       && exists(/databases/$(database)/documents/users/$(request.auth.uid))
       && get(/databases/$(database)/documents/users/$(request.auth.uid))
         .data.approvalStatus == 'approved';
   }
-
   function profile() {
     return get(
       /databases/$(database)/documents/users/$(request.auth.uid)
     ).data;
   }
-
   function validAuthorPrivacy() {
     let p = request.resource.data;
-
     return p.showAuthorName is bool
       && p.showAuthorUnit is bool
       && p.authorName is string
       && p.authorUnit is string
-
       && (
         (
           p.showAuthorName == false
@@ -163,11 +178,8 @@ service cloud.firestore {
         )
       );
   }
-
   allow read: if isApprovedResident() || isAdmin();
-
   allow create: if isApprovedResident()
-
     && request.resource.data.keys().hasOnly([
       'text',
       'category',
@@ -178,7 +190,6 @@ service cloud.firestore {
       'authorName',
       'authorUnit'
     ])
-
     && request.resource.data.keys().hasAll([
       'text',
       'category',
@@ -189,24 +200,18 @@ service cloud.firestore {
       'authorName',
       'authorUnit'
     ])
-
     && request.resource.data.text is string
     && request.resource.data.text.size() > 0
     && request.resource.data.text.size() <= 2000
-
     && request.resource.data.category in [
       'News',
       'Ask for Help'
     ]
-
     && request.resource.data.createdBy == request.auth.uid
     && request.resource.data.createdAt == request.time
-
     && validAuthorPrivacy();
-
   allow update, delete: if false;
 }
-
     // Insert inside match /databases/{database}/documents, beside /posts.
     match /sharedItems/{itemId} {
       function approved() {
@@ -288,9 +293,6 @@ service cloud.firestore {
               && request.resource.data.isPublished is bool));
       allow delete: if false;
     }
-
-
-
     // Milestone 5: private borrowing lifecycle.
     match /borrowRequests/{requestId} {
       function approved() {
@@ -368,17 +370,108 @@ service cloud.firestore {
         && lockValid(resource.data, request.resource.data);
       allow delete: if false;
     }
-
-        // Private resident-to-resident Chat
+    // Official building events and resident RSVPs
+    match /events/{eventId} {
+      function isAdmin() {
+        return request.auth != null
+          && request.auth.token.get('admin', false) == true;
+      }
+      function isApprovedResident() {
+        return request.auth != null
+          && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+          && get(/databases/$(database)/documents/users/$(request.auth.uid))
+            .data.approvalStatus == 'approved';
+      }
+      function validEvent(d) {
+        return d.keys().hasOnly([
+            'title', 'description', 'date', 'endDate',
+            'location', 'allowsRSVP', 'status',
+            'createdBy', 'createdAt', 'updatedAt'
+          ])
+          && d.keys().hasAll([
+            'title', 'description', 'date', 'endDate',
+            'location', 'allowsRSVP', 'status',
+            'createdBy', 'createdAt', 'updatedAt'
+          ])
+          && d.title is string
+          && d.title.size() > 0
+          && d.title.size() <= 120
+          && d.description is string
+          && d.description.size() <= 2000
+          && d.location is string
+          && d.location.size() > 0
+          && d.location.size() <= 200
+          && d.date is timestamp
+          && d.endDate is timestamp
+          && d.endDate > d.date
+          && d.allowsRSVP is bool
+          && d.status in ['active', 'cancelled']
+          && d.createdBy is string
+          && d.createdAt is timestamp
+          && d.updatedAt is timestamp;
+      }
+      allow get, list: if isAdmin() || isApprovedResident();
+      allow create: if isAdmin()
+        && validEvent(request.resource.data)
+        && request.resource.data.status == 'active'
+        && request.resource.data.createdBy == request.auth.uid
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time;
+      allow update: if isAdmin()
+        && validEvent(request.resource.data)
+        && request.resource.data.createdBy == resource.data.createdBy
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.updatedAt == request.time
+        && (
+          resource.data.status == 'active'
+          || request.resource.data.status == 'cancelled'
+        );
+      allow delete: if false;
+      match /attendees/{residentUID} {
+        function approved() {
+          return request.auth != null
+            && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+            && get(/databases/$(database)/documents/users/$(request.auth.uid))
+              .data.approvalStatus == 'approved';
+        }
+        function ownRSVP() {
+          return approved()
+            && request.auth.uid == residentUID;
+        }
+        function eventData() {
+          return get(
+            /databases/$(database)/documents/events/$(eventId)
+          ).data;
+        }
+        allow get: if ownRSVP();
+        allow list: if approved()
+          || (request.auth != null
+              && request.auth.token.get('admin', false) == true);
+        allow create: if ownRSVP()
+          && exists(/databases/$(database)/documents/events/$(eventId))
+          && eventData().status == 'active'
+          && eventData().allowsRSVP == true
+          && eventData().date > request.time
+          && request.resource.data.keys().hasOnly([
+            'userId', 'createdAt'
+          ])
+          && request.resource.data.keys().hasAll([
+            'userId', 'createdAt'
+          ])
+          && request.resource.data.userId == residentUID
+          && request.resource.data.createdAt == request.time;
+        allow update: if false;
+        allow delete: if ownRSVP();
+      }
+    }
+// Private resident-to-resident Chat
     match /chats/{chatId} {
-
       function isApproved(uid) {
         return request.auth != null
           && exists(/databases/$(database)/documents/users/$(uid))
           && get(/databases/$(database)/documents/users/$(uid))
             .data.approvalStatus == 'approved';
       }
-
       function validParticipants(participants) {
         return participants is list
           && participants.size() == 2
@@ -389,15 +482,12 @@ service cloud.firestore {
           && isApproved(participants[0])
           && isApproved(participants[1]);
       }
-
       function isParticipant() {
         return request.auth != null
           && isApproved(request.auth.uid)
           && request.auth.uid in resource.data.participantIds;
       }
-
       allow get, list: if isParticipant();
-
       allow create: if request.auth != null
         && isApproved(request.auth.uid)
         && request.resource.data.keys().hasOnly([
@@ -409,25 +499,19 @@ service cloud.firestore {
         && validParticipants(request.resource.data.participantIds)
         && request.resource.data.createdAt == request.time
         && request.resource.data.updatedAt == request.time;
-
       allow update, delete: if false;
-
       match /messages/{messageId} {
-
         function parentChat() {
           return get(
             /databases/$(database)/documents/chats/$(chatId)
           ).data;
         }
-
         function canAccessChat() {
           return request.auth != null
             && isApproved(request.auth.uid)
             && request.auth.uid in parentChat().participantIds;
         }
-
         allow get, list: if canAccessChat();
-
         allow create: if canAccessChat()
           && request.resource.data.keys().hasOnly([
             'senderId', 'text', 'createdAt'
@@ -440,9 +524,109 @@ service cloud.firestore {
           && request.resource.data.text.size() > 0
           && request.resource.data.text.size() <= 2000
           && request.resource.data.createdAt == request.time;
-
         allow update, delete: if false;
       }
+    }
+    // Maintenance requests: residents see their own, admins manage all.
+    match /maintenanceRequests/{requestId} {
+      function admin() {
+        return request.auth != null
+          && request.auth.token.get('admin', false) == true;
+      }
+      function approved() {
+        return request.auth != null
+          && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+          && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.approvalStatus == 'approved';
+      }
+      allow get, list: if admin() || (approved() && resource.data.residentId == request.auth.uid);
+      allow create: if approved()
+        && request.resource.data.keys().hasOnly([
+          'title','details','unit','residentId','submittedAt','updatedAt','stage','photoPath'
+        ])
+        && request.resource.data.keys().hasAll([
+          'title','details','unit','residentId','submittedAt','updatedAt','stage'
+        ])
+        && request.resource.data.residentId == request.auth.uid
+        && request.resource.data.unit == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.unit
+        && request.resource.data.title is string
+        && request.resource.data.title.size() > 0
+        && request.resource.data.title.size() <= 120
+        && request.resource.data.details is string
+        && request.resource.data.details.size() > 0
+        && request.resource.data.details.size() <= 2000
+        && request.resource.data.submittedAt == request.time
+        && request.resource.data.updatedAt == request.time
+        && request.resource.data.stage == 0
+        && (!('photoPath' in request.resource.data)
+          || request.resource.data.photoPath == 'maintenancePhotos/' + request.auth.uid + '/' + requestId + '.jpg');
+      allow update: if admin()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['stage','updatedAt'])
+        && resource.data.stage is int
+        && resource.data.stage >= 0 && resource.data.stage < 3
+        && request.resource.data.stage == resource.data.stage + 1
+        && request.resource.data.updatedAt == request.time;
+      allow delete: if false;
+    }
+      // Gym configuration: only administrators may adjust capacity.
+    match /gymSettings/{settingId} {
+      function admin() {
+        return request.auth != null && request.auth.token.get('admin', false) == true;
+      }
+      function approved() {
+        return request.auth != null
+          && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+          && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.approvalStatus == 'approved';
+      }
+      allow read: if admin() || approved();
+      allow create, update: if settingId == 'main' && admin()
+        && request.resource.data.keys().hasOnly(['capacity'])
+        && request.resource.data.keys().hasAll(['capacity'])
+        && request.resource.data.capacity is int
+        && request.resource.data.capacity >= 1
+        && request.resource.data.capacity <= 100;
+      allow delete: if false;
+    }
+
+    // Gym session rosters. Admin creates sessions, residents change only their own membership.
+    match /gymSlots/{slotId} {
+      function admin() {
+        return request.auth != null && request.auth.token.get('admin', false) == true;
+      }
+      function approved() {
+        return request.auth != null
+          && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+          && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.approvalStatus == 'approved';
+      }
+      function capacity() {
+        return get(/databases/$(database)/documents/gymSettings/main).data.capacity;
+      }
+      function validChange() {
+        let before = resource.data.members;
+        let after = request.resource.data.members;
+        let uid = request.auth.uid;
+        return after is list && after.size() <= 100
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['members','updatedAt'])
+          && request.resource.data.updatedAt == request.time
+          && (
+            (!before.hasAny([uid]) && after.hasAll(before)
+              && after.hasAny([uid]) && after.size() == before.size() + 1
+              && after.size() <= capacity())
+            ||
+            (before.hasAny([uid]) && !after.hasAny([uid])
+              && before.hasAll(after) && after.size() == before.size() - 1)
+          );
+      }
+      allow read: if admin() || approved();
+      allow create: if admin()
+        && request.resource.data.keys().hasOnly(['start','members','updatedAt'])
+        && request.resource.data.keys().hasAll(['start','members','updatedAt'])
+        && request.resource.data.start is timestamp
+        && request.resource.data.start > request.time
+        && request.resource.data.members == []
+        && request.resource.data.updatedAt == request.time;
+      allow update: if approved() && resource.data.start > request.time
+        && validChange();
+      allow delete: if false;
     }
   }
 }

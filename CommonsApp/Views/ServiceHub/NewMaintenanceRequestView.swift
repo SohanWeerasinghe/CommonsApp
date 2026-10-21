@@ -15,6 +15,8 @@ struct NewMaintenanceRequestView: View {
 
     @State private var selectedPhoto: PhotosPickerItem?
     @State private var selectedImage: UIImage?
+    @State private var isSubmitting = false
+    @State private var submissionError: String?
 
     // MARK: - AI Detection
 
@@ -47,7 +49,7 @@ struct NewMaintenanceRequestView: View {
                                 .font(Theme.display(25, weight: .bold))
                                 .foregroundStyle(Theme.appNavy)
 
-                            Text("Add a photo and we'll analyse it to help identify the maintenance issue.")
+                            Text("Add a photo for on-device AI analysis. Only your reviewed request details are saved; the photo is not uploaded or shared with management.")
                                 .font(Theme.ui(13))
                                 .foregroundStyle(Theme.appMuted)
                                 .lineSpacing(3)
@@ -359,7 +361,6 @@ struct NewMaintenanceRequestView: View {
                                     .foregroundStyle(Theme.textMuted)
                                 } else {
                                     ForEach(detections) { detection in
-                                        ForEach(detections) { detection in
                                             HStack(spacing: 10) {
                                                 ZStack {
                                                     Circle()
@@ -385,7 +386,6 @@ struct NewMaintenanceRequestView: View {
                                                     .background(Theme.appGreenSoft)
                                                     .clipShape(Capsule())
                                             }
-                                        }
                                     }
                                 }
 
@@ -437,15 +437,24 @@ struct NewMaintenanceRequestView: View {
                 }
 
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Submit") {
-                        store.submitMaintenanceRequest(
-                            title: title,
-                            details: details
-                        )
-
-                        dismiss()
+                    Button(isSubmitting ? "Submitting…" : "Submit") {
+                        guard !isSubmitting else { return }
+                        isSubmitting = true
+                        submissionError = nil
+                        Task { @MainActor in
+                            do {
+                                let photo = selectedImage?.jpegData(compressionQuality: 0.72)
+                                try await store.submitMaintenanceRequest(
+                                    title: title, details: details, photoData: photo)
+                                dismiss()
+                            } catch {
+                                submissionError = error.localizedDescription
+                            }
+                            isSubmitting = false
+                        }
                     }
                     .disabled(
+                        isSubmitting || isAnalysing ||
                         title.trimmingCharacters(
                             in: .whitespacesAndNewlines
                         ).isEmpty
@@ -456,6 +465,14 @@ struct NewMaintenanceRequestView: View {
                     )
                 }
             }
+        }
+        .alert("Request not submitted", isPresented: Binding(
+            get: { submissionError != nil },
+            set: { if !$0 { submissionError = nil } }
+        )) {
+            Button("OK", role: .cancel) { submissionError = nil }
+        } message: {
+            Text(submissionError ?? "Unknown error")
         }
     }
 
@@ -504,6 +521,16 @@ struct NewMaintenanceRequestView: View {
             switch result {
             case .success(let objects):
                 detections = objects
+                if let best = objects.max(by: { $0.confidence < $1.confidence }),
+                   best.confidence >= 0.45 {
+                    let issue = best.label.replacingOccurrences(of: "_", with: " ").capitalized
+                    if title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        title = issue
+                    }
+                    if details.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        details = "Possible \(issue.lowercased()) detected in the photo. Please verify the issue and describe its location and severity."
+                    }
+                }
 
             case .failure(let error):
                 detectionError = error.localizedDescription
