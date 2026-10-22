@@ -12,6 +12,9 @@ struct SettingsView: View {
     @EnvironmentObject var store: AppStore
     @State private var showSignOutError = false
     @State private var signOutErrorMessage = ""
+    @State private var isUpdatingAppLock = false
+    @State private var showAppLockError = false
+    @State private var appLockErrorMessage = ""
 
     var body: some View {
         ZStack {
@@ -51,9 +54,20 @@ struct SettingsView: View {
                                     Spacer()
 
                                     // Toggle switch
-                                    Toggle("", isOn: $store.appLockEnabled)
-                                        .labelsHidden()
-                                        .tint(Theme.brass)
+                                    Toggle(
+                                        "",
+                                        isOn: Binding(
+                                            get: {
+                                                store.appLockEnabled
+                                            },
+                                            set: { newValue in
+                                                changeAppLock(to: newValue)
+                                            }
+                                        )
+                                    )
+                                    .labelsHidden()
+                                    .tint(Theme.brass)
+                                    .disabled(isUpdatingAppLock)
                                 }
 
                                 // Green confirmation shown when lock is on
@@ -200,6 +214,41 @@ struct SettingsView: View {
             Button("OK", role: .cancel) { }
         } message: {
             Text(signOutErrorMessage)
+        }
+        .alert("App Lock", isPresented: $showAppLockError) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text(appLockErrorMessage)
+        }
+    }
+
+    private func changeAppLock(to enabled: Bool) {
+        if isUpdatingAppLock {
+            return
+        }
+
+        isUpdatingAppLock = true
+
+        if enabled {
+            store.enableAppLock { success in
+                isUpdatingAppLock = false
+
+                if !success {
+                    appLockErrorMessage =
+                        "Unable to enable app lock. Check that Face ID or Touch ID is available and enrolled in your device settings."
+                    showAppLockError = true
+                }
+            }
+        } else {
+            store.disableAppLock { success in
+                isUpdatingAppLock = false
+
+                if !success {
+                    appLockErrorMessage =
+                        "Authentication was not completed. App lock remains enabled."
+                    showAppLockError = true
+                }
+            }
         }
     }
 }
