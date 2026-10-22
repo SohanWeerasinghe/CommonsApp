@@ -152,7 +152,7 @@ struct RootView: View {
             }
         }
         .onChange(of: scenePhase) { oldPhase, newPhase in
-            if newPhase == .background {
+            if newPhase == .inactive || newPhase == .background {
                 store.lockApp()
             }
         }

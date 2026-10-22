@@ -67,8 +67,10 @@ final class AppStore: ObservableObject {
 
     //Settings
     @Published var offlineCache: [OfflineCacheItem] = []
-    @Published var appLockEnabled: Bool = false
+    @Published private(set) var appLockEnabled: Bool = false
     @Published var isLocked: Bool = false
+
+    private let appLockPreferenceKey = "commonsAppLockEnabled"
 
     //Demo
     @Published var isManagerMode: Bool = false
@@ -76,6 +78,9 @@ final class AppStore: ObservableObject {
     //Sample data loading
 
     init() {
+        appLockEnabled = UserDefaults.standard.bool(forKey: appLockPreferenceKey)
+        isLocked = appLockEnabled
+
         seedSampleData()
     }
 
@@ -1651,9 +1656,68 @@ final class AppStore: ObservableObject {
     //App Lock (Face ID / Touch ID)
 
     func lockApp() {
-        // Only lock if the user has turned on app lock
         if appLockEnabled {
             isLocked = true
+        }
+    }
+
+    func enableAppLock(completion: @escaping (Bool) -> Void) {
+        let context = LAContext()
+        var error: NSError?
+
+        guard context.canEvaluatePolicy(
+            .deviceOwnerAuthenticationWithBiometrics,
+            error: &error
+        ) else {
+            DispatchQueue.main.async {
+                completion(false)
+            }
+            return
+        }
+
+        context.evaluatePolicy(
+            .deviceOwnerAuthenticationWithBiometrics,
+            localizedReason: "Enable biometric protection for Commons"
+        ) { success, _ in
+            DispatchQueue.main.async {
+                if success {
+                    self.appLockEnabled = true
+                    self.isLocked = false
+                    UserDefaults.standard.set(true, forKey: self.appLockPreferenceKey)
+                }
+
+                completion(success)
+            }
+        }
+    }
+
+    func disableAppLock(completion: @escaping (Bool) -> Void) {
+        let context = LAContext()
+        var error: NSError?
+
+        guard context.canEvaluatePolicy(
+            .deviceOwnerAuthentication,
+            error: &error
+        ) else {
+            DispatchQueue.main.async {
+                completion(false)
+            }
+            return
+        }
+
+        context.evaluatePolicy(
+            .deviceOwnerAuthentication,
+            localizedReason: "Disable Commons app lock"
+        ) { success, _ in
+            DispatchQueue.main.async {
+                if success {
+                    self.appLockEnabled = false
+                    self.isLocked = false
+                    UserDefaults.standard.set(false, forKey: self.appLockPreferenceKey)
+                }
+
+                completion(success)
+            }
         }
     }
 
@@ -1673,33 +1737,30 @@ final class AppStore: ObservableObject {
     }
 
     func unlockWithBiometrics(completion: @escaping (Bool) -> Void) {
-        // Import LocalAuthentication to use Face ID
         let context = LAContext()
         var error: NSError?
 
-        // Check if Face ID or Touch ID is available on this device
-        let canUseBiometrics = context.canEvaluatePolicy(
-            .deviceOwnerAuthenticationWithBiometrics,
+        guard context.canEvaluatePolicy(
+            .deviceOwnerAuthentication,
             error: &error
-        )
-
-        if canUseBiometrics {
-            // Ask the user to authenticate
-            context.evaluatePolicy(
-                .deviceOwnerAuthenticationWithBiometrics,
-                localizedReason: "Unlock Commons"
-            ) { success, error in
-                // Come back to the main thread to update the UI
-                DispatchQueue.main.async {
-                    if success {
-                        self.isLocked = false
-                    }
-                    completion(success)
-                }
+        ) else {
+            DispatchQueue.main.async {
+                completion(false)
             }
-        } else {
-            // Biometrics not available on this device
-            completion(false)
+            return
+        }
+
+        context.evaluatePolicy(
+            .deviceOwnerAuthentication,
+            localizedReason: "Unlock Commons"
+        ) { success, _ in
+            DispatchQueue.main.async {
+                if success {
+                    self.isLocked = false
+                }
+
+                completion(success)
+            }
         }
     }
 
