@@ -76,7 +76,17 @@ struct AppLockView: View {
             }
         }
         // Automatically try Face ID when this screen appears
-        .onAppear {
+        .task {
+            try? await Task.sleep(for: .milliseconds(350))
+
+            guard !Task.isCancelled else {
+                return
+            }
+
+            guard store.isLocked else {
+                return
+            }
+
             tryUnlock()
         }
     }

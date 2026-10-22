@@ -6,6 +6,8 @@
 //
 
 import SwiftUI
+import UserNotifications
+import UIKit
 
 struct SettingsView: View {
 
@@ -15,6 +17,9 @@ struct SettingsView: View {
     @State private var isUpdatingAppLock = false
     @State private var showAppLockError = false
     @State private var appLockErrorMessage = ""
+    @State private var notificationStatus: UNAuthorizationStatus = .notDetermined
+    @State private var isRequestingNotifications = false
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         ZStack {
@@ -86,6 +91,102 @@ struct SettingsView: View {
 
                                         Spacer()
                                     }
+                                }
+                            }
+                        }
+                    }
+
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("Require Authentication")
+                            .font(.system(size: 15, weight: .semibold))
+
+                        Picker(
+                            "Require Authentication",
+                            selection: Binding(
+                                get: {
+                                    store.appLockDelay
+                                },
+                                set: { newValue in
+                                    store.setAppLockDelay(newValue)
+                                }
+                            )
+                        ) {
+                            Text("Immediately").tag(0)
+                            Text("After 1 minute").tag(60)
+                            Text("After 5 minutes").tag(300)
+                            Text("After 15 minutes").tag(900)
+                        }
+                        .pickerStyle(.menu)
+                        .disabled(!store.appLockEnabled)
+                    }
+
+                    // MARK: Notifications
+
+                    VStack(alignment: .leading, spacing: 12) {
+                        SectionHeader(title: "Notifications")
+
+                        PlaqueCard {
+                            VStack(spacing: 16) {
+
+                                HStack(spacing: 14) {
+                                    Image(systemName: "bell.badge.fill")
+                                        .font(.system(size: 22))
+                                        .foregroundStyle(Theme.brass)
+                                        .frame(width: 32)
+
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text("Push Notifications")
+                                            .font(Theme.ui(14, weight: .semibold))
+                                            .foregroundStyle(Theme.textPrimary)
+
+                                        Text(notificationStatusText)
+                                            .font(Theme.ui(12))
+                                            .foregroundStyle(Theme.textMuted)
+                                    }
+
+                                    Spacer()
+
+                                    Image(
+                                        systemName: notificationsAllowed
+                                            ? "checkmark.circle.fill"
+                                            : "bell.slash.fill"
+                                    )
+                                    .foregroundStyle(
+                                        notificationsAllowed ? Theme.sage : Theme.textMuted
+                                    )
+                                }
+
+                                Divider()
+
+                                if notificationStatus == .notDetermined {
+                                    Button {
+                                        requestNotificationPermission()
+                                    } label: {
+                                        HStack {
+                                            if isRequestingNotifications {
+                                                ProgressView()
+                                            }
+
+                                            Text("Enable Notifications")
+                                        }
+                                        .frame(maxWidth: .infinity)
+                                    }
+                                    .buttonStyle(.borderedProminent)
+                                    .tint(Theme.brass)
+                                    .disabled(isRequestingNotifications)
+
+                                } else {
+                                    Button {
+                                        openNotificationSettings()
+                                    } label: {
+                                        HStack {
+                                            Image(systemName: "gearshape.fill")
+                                            Text("Manage Notification Settings")
+                                        }
+                                        .frame(maxWidth: .infinity)
+                                    }
+                                    .buttonStyle(.bordered)
+                                    .tint(Theme.brass)
                                 }
                             }
                         }
@@ -209,6 +310,14 @@ struct SettingsView: View {
             }
         }
         .navigationTitle("Settings")
+        .onAppear {
+            checkNotificationPermission()
+        }
+        .onChange(of: scenePhase) { _, newPhase in
+            if newPhase == .active {
+                checkNotificationPermission()
+            }
+        }
         .navigationBarTitleDisplayMode(.large)
         .alert("Sign Out Failed", isPresented: $showSignOutError) {
             Button("OK", role: .cancel) { }
@@ -220,6 +329,65 @@ struct SettingsView: View {
         } message: {
             Text(appLockErrorMessage)
         }
+    }
+
+    private var notificationsAllowed: Bool {
+        notificationStatus == .authorized ||
+        notificationStatus == .provisional ||
+        notificationStatus == .ephemeral
+    }
+
+    private var notificationStatusText: String {
+        switch notificationStatus {
+        case .notDetermined:
+            return "Notifications have not been enabled"
+
+        case .denied:
+            return "Notifications are disabled"
+
+        case .authorized:
+            return "Notifications are allowed"
+
+        case .provisional:
+            return "Quiet notifications are allowed"
+
+        case .ephemeral:
+            return "Temporary notification permission"
+
+        @unknown default:
+            return "Notification status unavailable"
+        }
+    }
+
+    private func checkNotificationPermission() {
+        UNUserNotificationCenter.current().getNotificationSettings { settings in
+            DispatchQueue.main.async {
+                notificationStatus = settings.authorizationStatus
+            }
+        }
+    }
+
+    private func requestNotificationPermission() {
+        isRequestingNotifications = true
+
+        UNUserNotificationCenter.current().requestAuthorization(
+            options: [.alert, .badge, .sound]
+        ) { _, _ in
+            DispatchQueue.main.async {
+                isRequestingNotifications = false
+                checkNotificationPermission()
+            }
+        }
+    }
+
+    private func openNotificationSettings() {
+        guard let url = URL(
+            string: UIApplication.openSettingsURLString
+        ) else {
+            return
+        }
+
+        UIApplication.shared.open(url)
     }
 
     private func changeAppLock(to enabled: Bool) {

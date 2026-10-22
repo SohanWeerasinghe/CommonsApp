@@ -467,11 +467,27 @@ struct ChatResidentAvatar: View {
 extension Date {
     var chatRelativeDescription: String {
         let seconds = max(0, Date().timeIntervalSince(self))
-        if seconds < 60 { return "Just now" }
-        if seconds < 3600 { return "\\(Int(seconds / 60))m ago" }
-        if Calendar.current.isDateInYesterday(self) { return "Yesterday" }
-        if seconds < 86400 { return "\\(Int(seconds / 3600))h ago" }
-        if seconds < 604800 { return "\\(Int(seconds / 86400))d ago" }
+
+        if seconds < 60 {
+            return "Just now"
+        }
+
+        if seconds < 3600 {
+            return "\(Int(seconds / 60))m ago"
+        }
+
+        if Calendar.current.isDateInYesterday(self) {
+            return "Yesterday"
+        }
+
+        if seconds < 86400 {
+            return "\(Int(seconds / 3600))h ago"
+        }
+
+        if seconds < 604800 {
+            return "\(Int(seconds / 86400))d ago"
+        }
+
         return formatted(date: .abbreviated, time: .omitted)
     }
 }

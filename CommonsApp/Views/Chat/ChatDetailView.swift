@@ -114,13 +114,12 @@ struct ChatDetailView: View {
         .toolbar(.hidden, for: .navigationBar)
         .onAppear {
             if let chatId = thread.firestoreId {
+                store.setActiveChat(chatId)
                 store.startChatMessagesListener(chatId: chatId)
             }
         }
         .onDisappear {
-            if let chatId = thread.firestoreId {
-                store.stopChatMessagesListener(chatId: chatId)
-            }
+            store.setActiveChat(nil)
         }
     }
 
