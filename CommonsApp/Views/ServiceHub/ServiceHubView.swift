@@ -232,74 +232,137 @@ private struct ServiceRequestRow: View {
 }
 
 private struct AmenitiesListView: View {
-    @EnvironmentObject var store: AppStore
-    @Environment(\.dismiss) var dismiss
+    @EnvironmentObject private var store: AppStore
+    @Environment(\.dismiss) private var dismiss
+
     var body: some View {
         NavigationStack {
             ZStack {
-                Color(
-                    red: 0.97,
-                    green: 0.97,
-                    blue: 0.96
+                LinearGradient(
+                    colors: [
+                        Theme.wallBackgroundTop,
+                        Theme.wallBackgroundBottom
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
                 )
                 .ignoresSafeArea()
+
                 ScrollView {
-                    VStack(spacing: 14) {
-                        ForEach(store.amenities) { amenity in
-                            NavigationLink {
-                                AmenityBookingView(
-                                    amenity: amenity
-                                )
-                            } label: {
-                                HStack {
-                                    VStack(alignment: .leading, spacing: 5) {
-                                        Text(amenity.name)
-                                            .font(
-                                                .system(
-                                                    size: 15,
-                                                    weight: .semibold
-                                                )
-                                            )
-                                            .foregroundStyle(Theme.appNavy)
-                                        Text(amenity.subtitle)
-                                            .font(.system(size: 12))
-                                            .foregroundStyle(Theme.appMuted)
-                                    }
-                                    Spacer()
-                                    Image(
-                                        systemName: "chevron.right"
-                                    )
-                                    .foregroundStyle(Theme.appMuted)
+                    VStack(alignment: .leading, spacing: 22) {
+                        header
+
+                        VStack(spacing: 12) {
+                            ForEach(store.amenities) { amenity in
+                                NavigationLink {
+                                    AmenityBookingView(amenity: amenity)
+                                } label: {
+                                    amenityCard(amenity)
                                 }
-                                .padding(16)
-                                .background(Theme.card)
-                                .clipShape(
-                                    RoundedRectangle(
-                                        cornerRadius: 16
-                                    )
-                                )
+                                .buttonStyle(.plain)
                             }
-                            .buttonStyle(.plain)
                         }
                     }
-                    .padding(20)
+                    .padding(.horizontal, Theme.screenPadding)
+                    .padding(.top, 24)
+                    .padding(.bottom, 32)
                 }
+                .scrollIndicators(.hidden)
             }
-            .navigationTitle("Book amenity")
             .navigationBarTitleDisplayMode(.inline)
-            .tint(Theme.appPurple)
             .toolbar {
-                ToolbarItem(
-                    placement: .topBarLeading
-                ) {
-                    Button("Close") {
+                ToolbarItem(placement: .principal) {
+                    Text("Book amenity")
+                        .font(Theme.ui(16, weight: .bold))
+                        .foregroundStyle(Theme.appNavy)
+                }
+
+                ToolbarItem(placement: .topBarLeading) {
+                    Button {
                         dismiss()
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 13, weight: .bold))
+                            .foregroundStyle(Theme.appNavy)
+                            .frame(width: 36, height: 36)
+                            .background(Theme.card, in: Circle())
                     }
+                    .accessibilityLabel("Close")
                 }
             }
+            .tint(Theme.appPurple)
+        }
+    }
+
+    private var header: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("YOUR COMMUNITY")
+                .font(Theme.ui(10, weight: .bold))
+                .tracking(1.3)
+                .foregroundStyle(Theme.appPurple)
+
+            Text("Find your space")
+                .font(Theme.display(28, weight: .bold))
+                .foregroundStyle(Theme.appNavy)
+
+            Text("Make the most of your community amenities. Choose a space to view available sessions.")
+                .font(Theme.ui(13))
+                .foregroundStyle(Theme.appMuted)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private func amenityCard(_ amenity: Amenity) -> some View {
+        HStack(spacing: 14) {
+            Image(systemName: "figure.strengthtraining.traditional")
+                .font(.system(size: 25, weight: .medium))
+                .foregroundStyle(Theme.appPurple)
+                .frame(width: 62, height: 62)
+                .background(
+                    Theme.appPurpleSoft,
+                    in: RoundedRectangle(cornerRadius: 18)
+                )
+
+            VStack(alignment: .leading, spacing: 7) {
+                Text(amenity.name)
+                    .font(Theme.ui(17, weight: .bold))
+                    .foregroundStyle(Theme.appNavy)
+
+                Text(amenity.subtitle)
+                    .font(Theme.ui(12))
+                    .foregroundStyle(Theme.appMuted)
+                    .lineLimit(2)
+
+                Label("View sessions", systemImage: "clock")
+                    .font(Theme.ui(10, weight: .semibold))
+                    .foregroundStyle(Theme.appPurple)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(Theme.appPurpleSoft, in: Capsule())
+            }
+
+            Spacer(minLength: 0)
+
+            Image(systemName: "chevron.right")
+                .font(.system(size: 13, weight: .bold))
+                .foregroundStyle(Theme.appPurple)
+                .frame(width: 30, height: 30)
+                .background(Theme.appPurpleSoft, in: Circle())
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            Theme.card,
+            in: RoundedRectangle(cornerRadius: 23)
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: 23)
+                .stroke(Theme.appBorder, lineWidth: 1)
         }
     }
 }
+
+
 private struct SimpleSettingsView: View {
     @Environment(\.dismiss) private var dismiss
     var body: some View {

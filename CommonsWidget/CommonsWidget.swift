@@ -45,7 +45,13 @@ struct CommonsProvider: TimelineProvider {
                      completion: @escaping (Timeline<CommonsEntry>) -> Void) {
 
         // Read data saved by the main app
-        let defaults = UserDefaults(suiteName: "group.com.yourname.commonsapp")
+        let defaults = UserDefaults(suiteName: "group.com.sohan.CommonsApp")
+        
+        print("WIDGET DEBUG: Shared storage available =", defaults != nil)
+        print(
+            "WIDGET DEBUG: Saved announcement =",
+            defaults?.string(forKey: "pinnedAnnouncement") ?? "nil"
+        )
 
         let announcement = defaults?.string(forKey: "pinnedAnnouncement")
             ?? "No announcements"
@@ -177,16 +183,23 @@ struct CommonsAppWidget: Widget {
     let kind: String = "CommonsAppWidget"
 
     var body: some WidgetConfiguration {
+        
         StaticConfiguration(kind: kind, provider: CommonsProvider()) { entry in
-            // Show different layouts based on widget size
+
             GeometryReader { geo in
+
                 if geo.size.width < 170 {
                     CommonsWidgetSmallView(entry: entry)
                 } else {
                     CommonsWidgetMediumView(entry: entry)
                 }
             }
+            .containerBackground(
+                Color(red: 0.11, green: 0.14, blue: 0.20),
+                for: .widget
+            )
         }
+
         .configurationDisplayName("Commons")
         .description("Building announcements and upcoming events")
         .supportedFamilies([.systemSmall, .systemMedium])

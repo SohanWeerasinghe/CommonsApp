@@ -123,6 +123,14 @@ struct BuildingEvent: Identifiable, Codable, Equatable {
     var isCancelled: Bool {
         status == .cancelled
     }
+    
+    var isCompleted: Bool {
+        if isCancelled {
+            return false
+        }
+
+        return date <= Date()
+    }
 }
 
 
