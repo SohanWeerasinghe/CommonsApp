@@ -1,5 +1,6 @@
 import SwiftUI
 
+
 private enum EventStyle {
     static let purple = Color(red: 0.46, green: 0.40, blue: 0.96)
     static let navy = Color(red: 0.12, green: 0.17, blue: 0.28)
@@ -23,6 +24,7 @@ struct EventCalendarView: View {
         store.events.filter { !$0.isCancelled && $0.date >= calendar.startOfDay(for: Date()) }
             .sorted { $0.date < $1.date }
     }
+
 
     var body: some View {
         ZStack {
@@ -267,6 +269,13 @@ struct EventCalendarView: View {
 
 private struct EventRedesignedCard: View {
     @EnvironmentObject private var store: AppStore
+
+    @ObservedObject private var reminderManager = EventReminderManager.shared
+
+    @State private var reminderError = ""
+    @State private var showReminderError = false
+    @State private var isUpdatingReminder = false
+
     let event: BuildingEvent
 
     var body: some View {
@@ -313,14 +322,58 @@ private struct EventRedesignedCard: View {
                             .background(event.isGoing ? Color(red: 0.87, green: 0.97, blue: 0.93) : EventStyle.lavender, in: Capsule())
                     }.buttonStyle(.borderless)
                 }
+
+                if !event.isCancelled && event.date > Date() {
+                    Button {
+                        Task {
+                            isUpdatingReminder = true
+
+                            if reminderManager.hasReminder(for: event) {
+                                reminderManager.disableReminder(for: event)
+                            } else {
+                                do {
+                                    try await reminderManager.enableReminder(for: event)
+                                } catch {
+                                    reminderError = error.localizedDescription
+                                    showReminderError = true
+                                }
+                            }
+
+                            isUpdatingReminder = false
+                        }
+                    } label: {
+                        Label(
+                            reminderManager.hasReminder(for: event)
+                                ? "Reminder On"
+                                : "Remind Me",
+                            systemImage: reminderManager.hasReminder(for: event)
+                                ? "bell.fill"
+                                : "bell"
+                        )
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(EventStyle.purple)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 8)
+                        .background(EventStyle.lavender, in: Capsule())
+                    }
+                    .buttonStyle(.borderless)
+                    .disabled(isUpdatingReminder)
+                }
+
                 Image(systemName: "chevron.right")
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(EventStyle.muted)
+
             }
         }
         .padding(14)
         .background(.white, in: RoundedRectangle(cornerRadius: 22))
         .overlay(RoundedRectangle(cornerRadius: 22).stroke(EventStyle.navy.opacity(0.07)))
+        .alert("Event Reminder", isPresented: $showReminderError) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(reminderError)
+        }
     }
 }
 

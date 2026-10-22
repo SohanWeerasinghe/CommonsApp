@@ -54,6 +54,11 @@ final class AppStore: ObservableObject {
     //Chat
     @Published var chatThreads: [ChatThread] = []
 
+    @Published var incomingChatNotification: ChatNotification? = nil
+
+    private var initializedChatListeners: Set<String> = []
+    private var activeChatId: String? = nil
+
     //Admin
     @Published var pendingResidents: [PendingResident] = []
     @Published var pinnedAnnouncementText: String = ""
@@ -71,15 +76,24 @@ final class AppStore: ObservableObject {
     @Published var isLocked: Bool = false
 
     private let appLockPreferenceKey = "commonsAppLockEnabled"
+    @Published private(set) var appLockDelay: Int = 0
+
+    private let appLockDelayPreferenceKey = "commonsAppLockDelay"
+    private var appLeftForegroundAt: Date?
 
     //Demo
     @Published var isManagerMode: Bool = false
+
+
 
     //Sample data loading
 
     init() {
         appLockEnabled = UserDefaults.standard.bool(forKey: appLockPreferenceKey)
         isLocked = appLockEnabled
+        appLockDelay = UserDefaults.standard.integer(
+            forKey: appLockDelayPreferenceKey
+        )
 
         seedSampleData()
     }
@@ -555,6 +569,9 @@ final class AppStore: ObservableObject {
         }
 
         chatMessageListeners.removeAll()
+        initializedChatListeners.removeAll()
+        activeChatId = nil
+        incomingChatNotification = nil
     }
 
     @MainActor
@@ -637,6 +654,17 @@ final class AppStore: ObservableObject {
                     }
 
                     self.chatThreads = threads
+                    let chatIds = Set(threads.compactMap { $0.firestoreId })
+
+                    for chatId in chatIds {
+                        self.startChatMessagesListener(chatId: chatId)
+                    }
+
+                    for chatId in Array(self.chatMessageListeners.keys) {
+                        if !chatIds.contains(chatId) {
+                            self.stopChatMessagesListener(chatId: chatId)
+                        }
+                    }
                 }
             }
     }
@@ -674,6 +702,55 @@ final class AppStore: ObservableObject {
                     }
 
                     let existingMessages = self.chatThreads[threadIndex].messages
+
+
+                    print("CHAT DEBUG: Message snapshot received for \(chatId)")
+                    print("CHAT DEBUG: Documents = \(documents.count)")
+                    print("CHAT DEBUG: Changes = \(snapshot?.documentChanges.count ?? 0)")
+
+                    let isFirstSnapshot = !self.initializedChatListeners.contains(chatId)
+
+                    if isFirstSnapshot {
+                        self.initializedChatListeners.insert(chatId)
+                    }
+
+                    if !isFirstSnapshot && self.activeChatId != chatId {
+                        let existingMessageIds = Set(
+                            existingMessages.compactMap { $0.firestoreId }
+                        )
+
+                        for change in snapshot?.documentChanges ?? [] {
+                            if change.type != .added {
+                                continue
+                            }
+
+                            let document = change.document
+                            let data = document.data()
+
+                            if existingMessageIds.contains(document.documentID) {
+                                continue
+                            }
+
+                            guard let senderId = data["senderId"] as? String,
+                                  senderId != uid,
+                                  let text = data["text"] as? String,
+                                  !text.isEmpty
+                            else {
+                                continue
+                            }
+
+                            let senderName = self.chatThreads[threadIndex].neighborName
+
+                            print("CHAT NOTIFICATION: \(senderName): \(text)")
+
+                            self.incomingChatNotification = ChatNotification(
+                                id: document.documentID,
+                                chatId: chatId,
+                                senderName: senderName,
+                                message: text
+                            )
+                        }
+                    }
 
                     let messages: [ChatMessage] = documents.compactMap { document in
                         let data = document.data()
@@ -715,6 +792,7 @@ final class AppStore: ObservableObject {
     func stopChatMessagesListener(chatId: String) {
         chatMessageListeners[chatId]?.remove()
         chatMessageListeners.removeValue(forKey: chatId)
+        initializedChatListeners.remove(chatId)
     }
 
     func toggleLike(_ post: Post) {
@@ -1103,6 +1181,7 @@ final class AppStore: ObservableObject {
                     }
                     .sorted { $0.date < $1.date }
                     self.syncEventAttendeeListeners(for: self.events, uid: uid)
+                    await EventReminderManager.shared.synchronize(with: self.events)
                 }
             }
     }
@@ -1653,6 +1732,54 @@ final class AppStore: ObservableObject {
         ]
     }
 
+    func setAppLockDelay(_ seconds: Int) {
+        let allowedValues = [0, 60, 300, 900]
+
+        guard allowedValues.contains(seconds) else {
+            return
+        }
+
+        appLockDelay = seconds
+
+        UserDefaults.standard.set(
+            seconds,
+            forKey: appLockDelayPreferenceKey
+        )
+    }
+
+    func appDidLeaveForeground() {
+        guard appLockEnabled else {
+            return
+        }
+
+        if appLeftForegroundAt == nil {
+            appLeftForegroundAt = Date()
+        }
+
+        if appLockDelay == 0 {
+            lockApp()
+        }
+    }
+
+    func appDidBecomeActive() {
+        guard appLockEnabled else {
+            appLeftForegroundAt = nil
+            return
+        }
+
+        guard let leftAt = appLeftForegroundAt else {
+            return
+        }
+
+        let elapsedSeconds = Date().timeIntervalSince(leftAt)
+
+        if elapsedSeconds >= Double(appLockDelay) {
+            lockApp()
+        }
+
+        appLeftForegroundAt = nil
+    }
+
     //App Lock (Face ID / Touch ID)
 
     func lockApp() {
@@ -1874,6 +2001,15 @@ final class AppStore: ObservableObject {
         saveDataForWidget()
     }
 
+    @MainActor
+    func setActiveChat(_ chatId: String?) {
+        activeChatId = chatId
+
+        if chatId != nil {
+            incomingChatNotification = nil
+        }
+    }
+
     //newest Firestore announcement and updates the Building Wall automatically
     func startAnnouncementListener() {
         // Prevent duplicate listeners.
@@ -1926,6 +2062,13 @@ final class AppStore: ObservableObject {
                     }
                 }
             }
+    }
+
+    struct ChatNotification: Identifiable {
+        let id: String
+        let chatId: String
+        let senderName: String
+        let message: String
     }
 
     func stopAnnouncementListener() {

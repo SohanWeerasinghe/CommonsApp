@@ -146,18 +146,74 @@ struct RootView: View {
                 MainTabView()
             }
 
+            if store.onboardingStage == .active,
+               !store.isLocked,
+               let notification = store.incomingChatNotification {
+
+                VStack {
+                    HStack(spacing: 12) {
+                        Image(systemName: "message.fill")
+                            .foregroundStyle(.white)
+                            .frame(width: 40, height: 40)
+                            .background(Theme.appPurple, in: Circle())
+
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(notification.senderName)
+                                .font(.system(size: 14, weight: .bold))
+
+                            Text(notification.message)
+                                .font(.system(size: 12))
+                                .lineLimit(2)
+                        }
+
+                        Spacer()
+
+                        Button {
+                            store.incomingChatNotification = nil
+                        } label: {
+                            Image(systemName: "xmark")
+                                .font(.system(size: 12, weight: .bold))
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .padding(14)
+                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 18))
+                    .shadow(radius: 10)
+                    .padding(.horizontal, 16)
+                    .padding(.top, 8)
+
+                    Spacer()
+                }
+                .zIndex(50)
+            }
+
             // Keep the existing app lock functionality
             if store.isLocked {
                 AppLockView()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .zIndex(100)
             }
         }
         .onChange(of: scenePhase) { oldPhase, newPhase in
-            if newPhase == .inactive || newPhase == .background {
-                store.lockApp()
+            if newPhase == .background {
+                store.appDidLeaveForeground()
+            }
+
+            if newPhase == .active {
+                store.appDidBecomeActive()
             }
         }
         .task {
             await store.restoreSession()
+
+            if store.onboardingStage == .active {
+                store.startChatThreadsListener()
+            }
+        }
+        .onChange(of: store.onboardingStage) { _, newStage in
+            if newStage == .active {
+                store.startChatThreadsListener()
+            }
         }
     }
 }

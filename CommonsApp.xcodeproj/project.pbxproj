@@ -11,6 +11,7 @@
 		491770C9407C4CEAA9656148 /* AdminMaintenanceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3D57776C6574A65AF7A243E /* AdminMaintenanceView.swift */; };
 		72073BAF3083F9A40032F504 /* BorrowingFlowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 72073BAE3083F9A40032F504 /* BorrowingFlowView.swift */; };
 		7217F29A3088E94300F1E520 /* FirebaseStorage in Frameworks */ = {isa = PBXBuildFile; productRef = 7217F2993088E94300F1E520 /* FirebaseStorage */; };
+		7217F2AA308A001600F1E520 /* EventReminderManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7217F2A9308A001100F1E520 /* EventReminderManager.swift */; };
 		72387211306BB0570061D2FD /* CommonsAppApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7238720E306BB0570061D2FD /* CommonsAppApp.swift */; };
 		72387212306BB0570061D2FD /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 72387210306BB0570061D2FD /* RootView.swift */; };
 		72387213306BB0570061D2FD /* MainTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7238720F306BB0570061D2FD /* MainTabView.swift */; };
@@ -83,6 +84,7 @@
 /* Begin PBXFileReference section */
 		1B9CC58219CF4298B1D73576 /* AdminGymManagementView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdminGymManagementView.swift; sourceTree = "<group>"; };
 		72073BAE3083F9A40032F504 /* BorrowingFlowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BorrowingFlowView.swift; sourceTree = "<group>"; };
+		7217F2A9308A001100F1E520 /* EventReminderManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventReminderManager.swift; sourceTree = "<group>"; };
 		7238720E306BB0570061D2FD /* CommonsAppApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommonsAppApp.swift; sourceTree = "<group>"; };
 		7238720F306BB0570061D2FD /* MainTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainTabView.swift; sourceTree = "<group>"; };
 		72387210306BB0570061D2FD /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
@@ -228,6 +230,7 @@
 		72387223306BB0F70061D2FD /* Events */ = {
 			isa = PBXGroup;
 			children = (
+				7217F2A9308A001100F1E520 /* EventReminderManager.swift */,
 				72387221306BB0F70061D2FD /* EventCalendarView.swift */,
 				AABBCC001122334455667788 /* CommunityEventEditor.swift */,
 				72387222306BB0F70061D2FD /* EventDetailView.swift */,
@@ -477,6 +480,7 @@
 		72767BF43060EC830078788B /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			files = (
+				7217F2AA308A001600F1E520 /* EventReminderManager.swift in Sources */,
 				72387211306BB0570061D2FD /* CommonsAppApp.swift in Sources */,
 				72387212306BB0570061D2FD /* RootView.swift in Sources */,
 				7238723E306BB0F70061D2FD /* ProfileSetupView.swift in Sources */,
