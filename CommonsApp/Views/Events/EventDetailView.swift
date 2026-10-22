@@ -6,25 +6,22 @@
 //
 
 import SwiftUI
-
+import FirebaseFirestore
+import UIKit
 struct EventDetailView: View {
-
     @EnvironmentObject var store: AppStore
     let event: BuildingEvent
     @State private var showEditEvent = false
     @State private var showCancelConfirmation = false
     @State private var adminError: String?
-
     private var currentEvent: BuildingEvent {
         guard let firestoreId = event.firestoreId else {
             return event
         }
-
         return store.events.first {
             $0.firestoreId == firestoreId
         } ?? event
     }
-
     var body: some View {
         ZStack {
             LinearGradient(
@@ -33,69 +30,57 @@ struct EventDetailView: View {
                 endPoint: .bottom
             )
             .ignoresSafeArea()
-
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
-
                     // Location label
                     Text(currentEvent.location.uppercased())
                         .font(Theme.ui(10, weight: .bold))
                         .foregroundStyle(Theme.appMuted)
                         .padding(.top, 12)
-
                     // Event image placeholder
-                    EventImagePlaceholder()
+                    EventCoverImage(coverId: currentEvent.coverId)
                         .frame(height: 210)
                         .clipShape(RoundedRectangle(cornerRadius: 24))
                         .padding(.top, 12)
-
                     // Event title
                     Text(currentEvent.title)
                         .font(Theme.display(28, weight: .bold))
                         .foregroundStyle(Theme.appNavy)
                         .padding(.top, 22)
-
                     // Date and location
                     VStack(alignment: .leading, spacing: 10) {
                         HStack(spacing: 9) {
                             Image(systemName: "calendar")
                                 .font(.system(size: 14, weight: .semibold))
                                 .foregroundStyle(Theme.appPurple)
-
                             Text(dateAndTimeText())
                                 .font(Theme.ui(13, weight: .medium))
                                 .foregroundStyle(Theme.appNavy)
                         }
-
                         HStack(spacing: 9) {
                             Image(systemName: "mappin.and.ellipse")
                                 .font(.system(size: 14, weight: .semibold))
                                 .foregroundStyle(Theme.appPurple)
-
                             Text(currentEvent.location)
                                 .font(Theme.ui(13, weight: .medium))
                                 .foregroundStyle(Theme.appNavy)
                         }
                     }
                     .padding(.top, 16)
-
                     Divider()
                         .padding(.vertical, 22)
-
                     if !currentEvent.description.isEmpty {
                         Text(currentEvent.description)
                             .font(Theme.ui(14))
                             .foregroundStyle(Theme.appNavy)
                             .padding(.bottom, 18)
                     }
-
                     // Attendees
                     HStack {
                         VStack(alignment: .leading, spacing: 8) {
                             Text("\(currentEvent.attendeeCount) GOING")
                                 .font(Theme.ui(10, weight: .bold))
                                 .foregroundStyle(Theme.appMuted)
-
                             Label(
                                 "\(currentEvent.attendeeCount) resident\(currentEvent.attendeeCount == 1 ? "" : "s") attending",
                                 systemImage: "person.2.fill"
@@ -103,10 +88,8 @@ struct EventDetailView: View {
                             .font(Theme.ui(13, weight: .medium))
                             .foregroundStyle(Theme.appPurple)
                         }
-
                         Spacer()
                     }
-
                     // RSVP button
                     if currentEvent.allowsRSVP &&
                        !currentEvent.isCancelled &&
@@ -117,7 +100,6 @@ struct EventDetailView: View {
                             HStack(spacing: 8) {
                                 Image(systemName: currentEvent.isGoing ? "checkmark" : "person.badge.plus")
                                     .font(.system(size: 14, weight: .bold))
-
                                 if currentEvent.isGoing {
                                     Text("I'm Going · \(currentEvent.attendeeCount) attending")
                                 } else {
@@ -134,7 +116,6 @@ struct EventDetailView: View {
                         .buttonStyle(.plain)
                         .padding(.top, 24)
                     }
-
                     if currentEvent.isCancelled {
                         Label("Event cancelled", systemImage: "xmark.circle.fill")
                             .foregroundStyle(.red)
@@ -157,7 +138,6 @@ struct EventDetailView: View {
                         Text(eventsError).foregroundStyle(.red)
                             .font(.footnote).padding(.top, 8)
                     }
-
                 }
                 .padding(.horizontal, 20)
                 .padding(.bottom, 40)
@@ -181,16 +161,13 @@ struct EventDetailView: View {
         }
         .navigationBarTitleDisplayMode(.inline)
     }
-
     func dateAndTimeText() -> String {
         let formatter = DateFormatter()
         formatter.dateFormat = "EEE, MMM d · h:mm a"
         return formatter.string(from: currentEvent.date)
     }
 }
-
 private struct EventImagePlaceholder: View {
-
     var body: some View {
         ZStack {
             LinearGradient(
@@ -201,12 +178,10 @@ private struct EventImagePlaceholder: View {
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             )
-
             VStack(spacing: 10) {
                 Image(systemName: "sun.horizon.fill")
                     .font(.system(size: 46, weight: .medium))
                     .foregroundStyle(Theme.appPurple)
-
                 Text("EVENT")
                     .font(Theme.ui(9, weight: .bold))
                     .foregroundStyle(Theme.appMuted)
@@ -215,17 +190,13 @@ private struct EventImagePlaceholder: View {
         .frame(maxWidth: .infinity)
     }
 }
-
 private struct AttendeeAvatars: View {
-
     let count: Int
-
     var body: some View {
         HStack(spacing: -8) {
             UnitBadge(unit: "6C", size: 34)
             UnitBadge(unit: "2A", size: 34)
             UnitBadge(unit: "9F", size: 34)
-
             if count > 3 {
                 Text("+\(count - 3)")
                     .font(Theme.ui(10, weight: .bold))
@@ -241,7 +212,6 @@ private struct AttendeeAvatars: View {
         }
     }
 }
-
 #Preview {
     NavigationStack {
         EventDetailView(
@@ -254,5 +224,34 @@ private struct AttendeeAvatars: View {
             )
         )
         .environmentObject(AppStore())
+    }
+}
+struct EventCoverImage: View {
+    let coverId: String?
+    @State private var image: UIImage?
+    var body: some View {
+        GeometryReader { geometry in
+            ZStack {
+                if let image {
+                    Image(uiImage: image).resizable().scaledToFill()
+                        .frame(width: geometry.size.width, height: geometry.size.height).clipped()
+                } else {
+                    LinearGradient(colors: [Theme.appPurple.opacity(0.18), Theme.info.opacity(0.12)], startPoint: .topLeading, endPoint: .bottomTrailing)
+                    Image(systemName: "sun.horizon.fill")
+                        .font(.system(size: 38)).foregroundStyle(Theme.appPurple)
+                }
+            }
+            .frame(width: geometry.size.width, height: geometry.size.height).clipped()
+        }
+        .task(id: coverId) {
+            image = nil
+            guard let coverId, !coverId.isEmpty else { return }
+            do {
+                let document = try await Firestore.firestore().collection("eventCovers").document(coverId).getDocument()
+                guard !Task.isCancelled, let base64 = document.data()?["imageBase64"] as? String,
+                      let data = Data(base64Encoded: base64), let decoded = UIImage(data: data) else { return }
+                image = decoded
+            } catch { print("Event cover load failed: \(error.localizedDescription)") }
+        }
     }
 }

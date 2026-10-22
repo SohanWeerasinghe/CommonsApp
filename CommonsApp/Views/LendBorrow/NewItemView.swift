@@ -4,23 +4,23 @@
 //
 //  Created by Sohan Weerasinghe on 26/9/2026.
 //
-
 import SwiftUI
-
+import PhotosUI
+import UIKit
 struct NewItemView: View {
-
     @EnvironmentObject var store: AppStore
     @Environment(\.dismiss) private var dismiss
-
     @State private var name = ""
     @State private var detail = ""
     @State private var status: SharedItem.Status = .lending
     @State private var availability = "Available now"
     @State private var isSaving = false
     @State private var saveError: String?
-
+    @State private var selectedPhoto: PhotosPickerItem?
+    @State private var photoData: Data?
+    @State private var photoPreview: UIImage?
+    @State private var isLoadingPhoto = false
     let availabilityOptions = ["Available now", "Weekends only"]
-
     var body: some View {
         NavigationStack {
             ZStack {
@@ -30,10 +30,8 @@ struct NewItemView: View {
                     endPoint: .bottom
                 )
                 .ignoresSafeArea()
-
                 ScrollView {
                     VStack(alignment: .leading, spacing: 24) {
-
                         // Lending / Needed selection
                         HStack(spacing: 12) {
                             TypeButton(
@@ -43,7 +41,6 @@ struct NewItemView: View {
                             ) {
                                 status = .lending
                             }
-
                             TypeButton(
                                 icon: "arrow.down",
                                 title: "I Need",
@@ -52,11 +49,9 @@ struct NewItemView: View {
                                 status = .needed
                             }
                         }
-
                         // Item name
                         VStack(alignment: .leading, spacing: 8) {
                             FieldLabel(text: "ITEM NAME")
-
                             TextField("e.g. Power Drill", text: $name)
                                 .font(Theme.ui(15))
                                 .foregroundStyle(Theme.appNavy)
@@ -69,11 +64,9 @@ struct NewItemView: View {
                                         .stroke(Theme.appBorder, lineWidth: 1)
                                 }
                         }
-
                         // Description
                         VStack(alignment: .leading, spacing: 8) {
                             FieldLabel(text: "DESCRIPTION")
-
                             TextField("Cordless, with bits, brand new", text: $detail, axis: .vertical)
                                 .font(Theme.ui(15))
                                 .foregroundStyle(Theme.appNavy)
@@ -87,11 +80,9 @@ struct NewItemView: View {
                                         .stroke(Theme.appBorder, lineWidth: 1)
                                 }
                         }
-
                         // Availability
                         VStack(alignment: .leading, spacing: 10) {
                             FieldLabel(text: "AVAILABILITY")
-
                             HStack(spacing: 10) {
                                 ForEach(availabilityOptions, id: \.self) { option in
                                     Button {
@@ -117,57 +108,47 @@ struct NewItemView: View {
                                     }
                                     .buttonStyle(.plain)
                                 }
-
                                 Spacer()
                             }
                         }
-
-                        // Photo placeholder
+                        // Optional listing photo
                         VStack(alignment: .leading, spacing: 8) {
                             FieldLabel(text: "PHOTO")
-
-                            Button {
-                                // Photo picker will be connected later.
-                            } label: {
+                            if let photoPreview {
+                                Image(uiImage: photoPreview)
+                                    .resizable()
+                                    .scaledToFit()
+                                    .frame(maxWidth: .infinity)
+                                    .frame(maxHeight: 230)
+                                    .clipShape(RoundedRectangle(cornerRadius: 16))
+                            }
+                            PhotosPicker(selection: $selectedPhoto, matching: .images) {
                                 HStack(spacing: 12) {
-                                    ZStack {
-                                        Circle()
-                                            .fill(Theme.appPurpleSoft)
-                                            .frame(width: 42, height: 42)
-
-                                        Image(systemName: "photo.badge.plus")
-                                            .font(.system(size: 17, weight: .semibold))
-                                            .foregroundStyle(Theme.appPurple)
-                                    }
-
-                                    VStack(alignment: .leading, spacing: 3) {
-                                        Text("Add a photo")
-                                            .font(Theme.ui(14, weight: .semibold))
-                                            .foregroundStyle(Theme.appNavy)
-
-                                        Text("Optional")
-                                            .font(Theme.ui(11))
-                                            .foregroundStyle(Theme.appMuted)
-                                    }
-
-                                    Spacer()
-
-                                    Image(systemName: "plus")
-                                        .font(.system(size: 15, weight: .semibold))
+                                    Image(systemName: "photo.badge.plus")
+                                        .font(.system(size: 20, weight: .semibold))
                                         .foregroundStyle(Theme.appPurple)
+                                    Text(photoData == nil ? "Add a photo (optional)" : "Replace photo")
+                                        .font(Theme.ui(14, weight: .semibold))
+                                        .foregroundStyle(Theme.appNavy)
+                                    Spacer()
+                                    if isLoadingPhoto { ProgressView() }
                                 }
-                                .padding(.horizontal, 14)
-                                .frame(height: 70)
+                                .padding(16)
                                 .background(Theme.card)
                                 .clipShape(RoundedRectangle(cornerRadius: 16))
-                                .overlay {
-                                    RoundedRectangle(cornerRadius: 16)
-                                        .stroke(Theme.appBorder, lineWidth: 1)
-                                }
+                                .overlay(RoundedRectangle(cornerRadius: 16).stroke(Theme.appBorder, lineWidth: 1))
                             }
-                            .buttonStyle(.plain)
+                            .disabled(isSaving || isLoadingPhoto)
+                            if photoData != nil {
+                                Button("Remove photo", role: .destructive) {
+                                    selectedPhoto = nil
+                                    photoData = nil
+                                    photoPreview = nil
+                                }
+                                .font(Theme.ui(13, weight: .semibold))
+                                .disabled(isSaving)
+                            }
                         }
-
                         // Post button
                         Button {
                             addItem()
@@ -181,7 +162,7 @@ struct NewItemView: View {
                                 .clipShape(Capsule())
                         }
                         .buttonStyle(.plain)
-                        .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isSaving)
+                        .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isSaving || isLoadingPhoto)
                         .padding(.top, 4)
                     }
                     .padding(.horizontal, 20)
@@ -195,6 +176,9 @@ struct NewItemView: View {
                 set: { if !$0 { saveError = nil } })) {
                 Button("OK", role: .cancel) { saveError = nil }
             } message: { Text(saveError ?? "") }
+            .onChange(of: selectedPhoto) { _, item in
+                Task { await loadSelectedPhoto(item) }
+            }
             .navigationTitle("Add Item")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -205,19 +189,54 @@ struct NewItemView: View {
                     .font(Theme.ui(14, weight: .semibold))
                     .foregroundStyle(Theme.appNavy)
                 }
-
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Post") {
                         addItem()
                     }
                     .font(Theme.ui(14, weight: .bold))
                     .foregroundStyle(name.isEmpty ? Theme.appMuted : Theme.appPurple)
-                    .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isSaving)
+                    .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isSaving || isLoadingPhoto)
                 }
             }
         }
     }
-
+    @MainActor
+    private func loadSelectedPhoto(_ item: PhotosPickerItem?) async {
+        guard let item else { return }
+        isLoadingPhoto = true
+        defer { isLoadingPhoto = false }
+        do {
+            guard let data = try await item.loadTransferable(type: Data.self),
+                  let image = UIImage(data: data) else {
+                throw NSError(domain: "CommonsApp.Items", code: 400,
+                              userInfo: [NSLocalizedDescriptionKey: "Unable to read the selected photo."])
+            }
+            let scale = min(1, 900 / max(image.size.width, image.size.height))
+            let size = CGSize(width: image.size.width * scale, height: image.size.height * scale)
+            let renderer = UIGraphicsImageRenderer(size: size)
+            let resized = renderer.image { _ in
+                image.draw(in: CGRect(origin: .zero, size: size))
+            }
+            var compressed: Data?
+            for quality in [0.70, 0.55, 0.40, 0.28, 0.18] {
+                if let candidate = resized.jpegData(compressionQuality: quality),
+                   candidate.base64EncodedString().count <= 500_000 {
+                    compressed = candidate
+                    break
+                }
+            }
+            guard let compressed else {
+                throw NSError(domain: "CommonsApp.Items", code: 413,
+                              userInfo: [NSLocalizedDescriptionKey: "Photo is too large. Choose a smaller image."])
+            }
+            photoData = compressed
+            photoPreview = UIImage(data: compressed)
+        } catch {
+            photoData = nil
+            photoPreview = nil
+            saveError = error.localizedDescription
+        }
+    }
     func addItem() {
         guard !isSaving else { return }
         isSaving = true
@@ -225,7 +244,7 @@ struct NewItemView: View {
             defer { isSaving = false }
             do {
                 try await store.publishSharedItem(name: name, detail: detail,
-                                                   status: status, availability: availability)
+                                                   status: status, availability: availability, photoData: photoData)
                 dismiss()
             } catch {
                 saveError = error.localizedDescription
@@ -233,21 +252,16 @@ struct NewItemView: View {
         }
     }
 }
-
-
 private struct TypeButton: View {
-
     let icon: String
     let title: String
     let isSelected: Bool
     let action: () -> Void
-
     var body: some View {
         Button(action: action) {
             VStack(spacing: 10) {
                 Image(systemName: icon)
                     .font(.system(size: 19, weight: .semibold))
-
                 Text(title)
                     .font(Theme.ui(13, weight: .bold))
             }
@@ -266,19 +280,14 @@ private struct TypeButton: View {
         .buttonStyle(.plain)
     }
 }
-
 private struct FieldLabel: View {
-
     let text: String
-
     var body: some View {
         Text(text)
             .font(Theme.ui(10, weight: .bold))
             .foregroundStyle(Theme.appMuted)
     }
 }
-
-
 #Preview {
     NewItemView()
         .environmentObject(AppStore())
