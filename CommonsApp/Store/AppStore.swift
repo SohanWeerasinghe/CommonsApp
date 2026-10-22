@@ -4,6 +4,7 @@
 //
 //  Created by Sohan Weerasinghe on 21/9/2026.
 //
+
 import Foundation
 import SwiftUI
 import Combine
@@ -58,7 +59,6 @@ final class AppStore: ObservableObject {
     @Published var sharedItemsError: String? = nil
     private var chatDirectory: [String: (name: String, unit: String)] = [:]
     private var chatThreadsListener: ListenerRegistration?
-    private var chatDirectoryListener: ListenerRegistration?
     private var chatMessageListeners: [String: ListenerRegistration] = [:]
     //Settings
     @Published var offlineCache: [OfflineCacheItem] = []
@@ -343,7 +343,8 @@ final class AppStore: ObservableObject {
         text: String,
         category: Post.Category,
         showAuthorName: Bool,
-        showAuthorUnit: Bool
+        showAuthorUnit: Bool,
+        photoData: Data? = nil
     ) async throws {
         guard let user = Auth.auth().currentUser else {
             throw NSError(
@@ -398,18 +399,36 @@ final class AppStore: ObservableObject {
         let visibleUnit = showAuthorName && showAuthorUnit && unitAllowed
             ? unit
             : ""
-        try await Firestore.firestore()
-            .collection("posts")
-            .addDocument(data: [
-                "text": trimmedText,
-                "category": category.rawValue,
-                "createdAt": FieldValue.serverTimestamp(),
-                "createdBy": user.uid,
-                "showAuthorName": showAuthorName,
-                "showAuthorUnit": !visibleUnit.isEmpty,
-                "authorName": visibleName,
-                "authorUnit": visibleUnit
-            ])
+        let database = Firestore.firestore()
+        let postReference = database.collection("posts").document()
+        var postFields: [String: Any] = [
+            "text": trimmedText,
+            "category": category.rawValue,
+            "createdAt": FieldValue.serverTimestamp(),
+            "createdBy": user.uid,
+            "showAuthorName": showAuthorName,
+            "showAuthorUnit": !visibleUnit.isEmpty,
+            "authorName": visibleName,
+            "authorUnit": visibleUnit
+        ]
+        let batch = database.batch()
+        if let photoData {
+            let base64 = photoData.base64EncodedString()
+            guard !base64.isEmpty && base64.count <= 500_000 else {
+                throw NSError(domain: "CommonsApp", code: 413,
+                              userInfo: [NSLocalizedDescriptionKey: "Photo exceeds the size limit."])
+            }
+            postFields["photoId"] = postReference.documentID
+            let photoReference = database.collection("residentPostPhotos")
+                .document(postReference.documentID)
+            batch.setData([
+                "imageBase64": base64,
+                "ownerUID": user.uid,
+                "createdAt": FieldValue.serverTimestamp()
+            ], forDocument: photoReference)
+        }
+        batch.setData(postFields, forDocument: postReference)
+        try await batch.commit()
     }
     func startResidentPostsListener() {
         guard residentPostsListener == nil else { return }
@@ -451,7 +470,9 @@ final class AppStore: ObservableObject {
                             authorUnit: displayUnit,
                             timestamp: timestamp,
                             category: category,
-                            text: text
+                            text: text,
+                            hasPhoto: data["photoId"] as? String != nil,
+                            photoId: data["photoId"] as? String
                         )
                     }
                     // Keep administrator announcements separate.
@@ -465,9 +486,6 @@ final class AppStore: ObservableObject {
         residentPostsListener = nil
     }
     func stopChatListeners() {
-        chatDirectoryListener?.remove()
-        chatDirectoryListener = nil
-        chatDirectory.removeAll()
         chatThreadsListener?.remove()
         chatThreadsListener = nil
         for listener in chatMessageListeners.values {
@@ -479,42 +497,10 @@ final class AppStore: ObservableObject {
         incomingChatNotification = nil
     }
     @MainActor
-    private func startChatDirectoryListener() {
-        guard chatDirectoryListener == nil else { return }
-        guard onboardingStage == .active else { return }
-        guard let uid = Auth.auth().currentUser?.uid else { return }
-        chatDirectoryListener = Firestore.firestore().collection("residentDirectory")
-            .addSnapshotListener { [weak self] snapshot, error in
-                if let error {
-                    print("Resident directory listener error: \(error.localizedDescription)")
-                    return
-                }
-                guard let documents = snapshot?.documents else { return }
-                Task { @MainActor [weak self] in
-                    guard let self, Auth.auth().currentUser?.uid == uid,
-                          self.onboardingStage == .active else { return }
-                    var directory: [String: (name: String, unit: String)] = [:]
-                    for document in documents {
-                        let data = document.data()
-                        guard let name = data["name"] as? String, !name.isEmpty else { continue }
-                        directory[document.documentID] = (name: name, unit: data["unit"] as? String ?? "")
-                    }
-                    self.chatDirectory = directory
-                    for index in self.chatThreads.indices {
-                        guard let neighborUID = self.chatThreads[index].neighborUID,
-                              let resident = directory[neighborUID] else { continue }
-                        self.chatThreads[index].neighborName = resident.name
-                        self.chatThreads[index].neighborUnit = resident.unit
-                    }
-                }
-            }
-    }
-    @MainActor
     func startChatThreadsListener() {
         guard chatThreadsListener == nil else { return }
         guard onboardingStage == .active else { return }
         guard let uid = Auth.auth().currentUser?.uid else { return }
-        startChatDirectoryListener()
         chatThreadsListener = Firestore.firestore()
             .collection("chats")
             .whereField("participantIds", arrayContains: uid)
@@ -528,6 +514,17 @@ final class AppStore: ObservableObject {
                     guard let self = self else { return }
                     guard Auth.auth().currentUser?.uid == uid else { return }
                     guard self.onboardingStage == .active else { return }
+                    // Resolve only public, approved-resident directory fields.
+                    do {
+                        let directory = try await Firestore.firestore()
+                            .collection("residentDirectory").getDocuments()
+                        self.chatDirectory = Dictionary(uniqueKeysWithValues: directory.documents.compactMap { doc -> (String, (name: String, unit: String))? in
+                            guard let name = doc.data()["name"] as? String, !name.isEmpty else { return nil }
+                            return (doc.documentID, (name: name, unit: doc.data()["unit"] as? String ?? ""))
+                        })
+                    } catch {
+                        print("Directory lookup failed: \(error.localizedDescription)")
+                    }
                     let threads: [ChatThread] = documents.compactMap { document in
                         let data = document.data()
                         guard let participants = data["participantIds"] as? [String],
@@ -749,7 +746,8 @@ final class AppStore: ObservableObject {
                             name: name, detail: detail, ownerName: ownerName,
                             ownerUnit: ownerUnit, status: status, ownerUID: ownerUID,
                             availability: data["availability"] as? String ?? "Available now",
-                            firestoreId: doc.documentID)
+                            firestoreId: doc.documentID,
+                            photoId: data["photoId"] as? String)
                     }
                 }
             }
@@ -760,7 +758,7 @@ final class AppStore: ObservableObject {
     }
     @MainActor
     func publishSharedItem(name: String, detail: String, status: SharedItem.Status,
-                           availability: String) async throws {
+                           availability: String, photoData: Data? = nil) async throws {
         guard onboardingStage == .active, let uid = Auth.auth().currentUser?.uid else {
             throw NSError(domain: "CommonsApp.Items", code: 403,
                           userInfo: [NSLocalizedDescriptionKey: "Approved resident required."])
@@ -778,7 +776,9 @@ final class AppStore: ObservableObject {
             throw NSError(domain: "CommonsApp.Items", code: 403,
                           userInfo: [NSLocalizedDescriptionKey: "Approved resident required."])
         }
-        try await Firestore.firestore().collection("sharedItems").addDocument(data: [
+        let database = Firestore.firestore()
+        let itemReference = database.collection("sharedItems").document()
+        var fields: [String: Any] = [
             "name": title, "detail": description, "status": status.rawValue,
             "availability": availability, "ownerUID": uid,
             "ownerName": data["name"] as? String ?? "Resident",
@@ -786,7 +786,23 @@ final class AppStore: ObservableObject {
                 ? (data["unit"] as? String ?? "") : "",
             "createdAt": FieldValue.serverTimestamp(),
             "isPublished": true
-        ])
+        ]
+        let batch = database.batch()
+        if let photoData {
+            let base64 = photoData.base64EncodedString()
+            guard !base64.isEmpty && base64.count <= 500_000 else {
+                throw NSError(domain: "CommonsApp.Items", code: 413,
+                              userInfo: [NSLocalizedDescriptionKey: "Photo exceeds the size limit."])
+            }
+            fields["photoId"] = itemReference.documentID
+            batch.setData([
+                "imageBase64": base64,
+                "ownerUID": uid,
+                "createdAt": FieldValue.serverTimestamp()
+            ], forDocument: database.collection("sharedItemPhotos").document(itemReference.documentID))
+        }
+        batch.setData(fields, forDocument: itemReference)
+        try await batch.commit()
     }
     // Requests are independent of Chat. Read only requests involving this UID.
     @MainActor
@@ -1020,6 +1036,7 @@ final class AppStore: ObservableObject {
                         event.allowsRSVP = data["allowsRSVP"] as? Bool ?? false
                         event.status = status
                         event.createdBy = data["createdBy"] as? String ?? ""
+                        event.coverId = data["coverId"] as? String
                         return event
                     }
                     .sorted { $0.date < $1.date }
@@ -1128,7 +1145,8 @@ final class AppStore: ObservableObject {
     @MainActor
     func saveCommunityEvent(
         existing: BuildingEvent?, title: String, description: String,
-        start: Date, end: Date, location: String, allowsRSVP: Bool
+        start: Date, end: Date, location: String, allowsRSVP: Bool,
+        coverData: Data? = nil, removeCover: Bool = false
     ) async throws {
         guard onboardingStage == .admin, let user = Auth.auth().currentUser else {
             throw eventError("Administrator access required.")
@@ -1171,6 +1189,21 @@ final class AppStore: ObservableObject {
                 "createdAt": FieldValue.serverTimestamp(),
                 "updatedAt": FieldValue.serverTimestamp()
             ], forDocument: eventRef)
+        }
+        if let coverData {
+            let base64 = coverData.base64EncodedString()
+            guard !base64.isEmpty && base64.count <= 500_000 else {
+                throw eventError("Event cover exceeds the photo size limit.")
+            }
+            batch.setData([
+                "imageBase64": base64,
+                "ownerUID": user.uid,
+                "updatedAt": FieldValue.serverTimestamp()
+            ], forDocument: db.collection("eventCovers").document(eventRef.documentID))
+            batch.updateData(["coverId": eventRef.documentID], forDocument: eventRef)
+        } else if removeCover, existing?.coverId != nil {
+            batch.updateData(["coverId": FieldValue.delete()], forDocument: eventRef)
+            batch.deleteDocument(db.collection("eventCovers").document(eventRef.documentID))
         }
         let notice = eventNoticeText(action: action, title: name, date: start, location: place)
         let noticeRef = db.collection("announcements").document()
@@ -1878,20 +1911,11 @@ final class AppStore: ObservableObject {
             throw NSError(domain: "CommonsApp.Profile", code: 403,
                           userInfo: [NSLocalizedDescriptionKey: "An approved resident account is required."])
         }
-        let directoryReference = Firestore.firestore().collection("residentDirectory").document(user.uid)
-        let directorySnapshot = try await directoryReference.getDocument(source: .server)
-        guard directorySnapshot.exists else {
-            throw NSError(domain: "CommonsApp.Profile", code: 404,
-                          userInfo: [NSLocalizedDescriptionKey: "Your resident directory entry is missing. Contact building administration."])
-        }
-        let batch = Firestore.firestore().batch()
-        batch.updateData([
+        try await reference.updateData([
             "name": updatedName,
             "phone": updatedPhone,
             "showUnitToNeighbors": showUnit
-        ], forDocument: reference)
-        batch.updateData(["name": updatedName], forDocument: directoryReference)
-        try await batch.commit()
+        ])
         currentResident.name = updatedName
         currentResident.phone = updatedPhone
         currentResident.showUnitToNeighbors = showUnit

@@ -1,17 +1,16 @@
 import SwiftUI
-
+import PhotosUI
+import UIKit
 private enum EventEditorTheme {
     static let purple = Color(red: 0.40, green: 0.32, blue: 0.87)
     static let ink = Color(red: 0.11, green: 0.15, blue: 0.26)
     static let muted = Color(red: 0.44, green: 0.49, blue: 0.59)
     static let background = Color(red: 0.965, green: 0.970, blue: 0.985)
 }
-
 struct CommunityEventEditor: View {
     @EnvironmentObject private var store: AppStore
     @Environment(\.dismiss) private var dismiss
     @State private var showCancelConfirmation = false
-
     let existing: BuildingEvent?
     @State private var title: String
     @State private var description: String
@@ -19,10 +18,13 @@ struct CommunityEventEditor: View {
     @State private var start: Date
     @State private var end: Date
     @State private var allowsRSVP: Bool
+    @State private var selectedCover: PhotosPickerItem?
+    @State private var coverImage: UIImage?
+    @State private var coverData: Data?
+    @State private var removeExistingCover = false
     @State private var saving = false
     @State private var errorMessage: String?
     @FocusState private var fieldFocused: Bool
-
     init(existing: BuildingEvent?) {
         self.existing = existing
         let initialStart = existing?.date ?? Date().addingTimeInterval(3600)
@@ -33,7 +35,6 @@ struct CommunityEventEditor: View {
         _end = State(initialValue: existing?.endDate ?? initialStart.addingTimeInterval(3600))
         _allowsRSVP = State(initialValue: existing?.allowsRSVP ?? true)
     }
-
     private var valid: Bool {
         let name = title.trimmingCharacters(in: .whitespacesAndNewlines)
         let place = location.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -41,7 +42,6 @@ struct CommunityEventEditor: View {
             place.count <= 200 && description.count <= 2000 &&
             start > Date() && end > start
     }
-
     var body: some View {
         ZStack {
             EventEditorTheme.background.ignoresSafeArea()
@@ -84,6 +84,55 @@ struct CommunityEventEditor: View {
                             counter(description.count, maximum: 2000)
                         }
                     }
+                    card("Event cover", icon: "photo") {
+                        VStack(alignment: .leading, spacing: 12) {
+                            if let coverImage {
+                                GeometryReader { geometry in
+                                    Image(uiImage: coverImage).resizable().scaledToFill()
+                                        .frame(width: geometry.size.width, height: geometry.size.height).clipped()
+                                }
+                                .frame(height: 180).clipShape(RoundedRectangle(cornerRadius: 14))
+                            } else if let existing, existing.coverId != nil && !removeExistingCover {
+                                EventCoverImage(coverId: existing.coverId)
+                                    .frame(height: 180).clipShape(RoundedRectangle(cornerRadius: 14))
+                            }
+                            PhotosPicker(selection: $selectedCover, matching: .images) {
+                                Label(coverImage == nil ? "Choose cover photo" : "Replace cover photo", systemImage: "photo.badge.plus")
+                                    .foregroundStyle(EventEditorTheme.purple)
+                            }
+                            if coverImage != nil || (existing?.coverId != nil && !removeExistingCover) {
+                                Button("Remove cover", role: .destructive) {
+                                    coverImage = nil
+                                    coverData = nil
+                                    selectedCover = nil
+                                    removeExistingCover = true
+                                }
+                            }
+                            Text("Optional · One photo · Stored securely in Firestore")
+                                .font(.system(size: 11)).foregroundStyle(EventEditorTheme.muted)
+                        }
+                    }
+                    .onChange(of: selectedCover) { _, selection in
+                        Task { @MainActor in
+                            guard let selection, let data = try? await selection.loadTransferable(type: Data.self),
+                                  let image = UIImage(data: data) else { return }
+                            let maxSide: CGFloat = 1000
+                            let scale = min(1, maxSide / max(image.size.width, image.size.height))
+                            let size = CGSize(width: image.size.width * scale, height: image.size.height * scale)
+                            let renderer = UIGraphicsImageRenderer(size: size)
+                            let resized = renderer.image { _ in image.draw(in: CGRect(origin: .zero, size: size)) }
+                            for quality in [0.65, 0.5, 0.35, 0.2] as [CGFloat] {
+                                if let jpeg = resized.jpegData(compressionQuality: quality), jpeg.base64EncodedString().count <= 500_000 {
+                                    coverImage = resized
+                                    coverData = jpeg
+                                    removeExistingCover = false
+                                    errorMessage = nil
+                                    return
+                                }
+                            }
+                            errorMessage = "Please choose a smaller cover photo."
+                        }
+                    }
                     card("Date & time", icon: "clock") {
                         VStack(spacing: 13) {
                             DatePicker("Starts", selection: $start, in: Date()..., displayedComponents: [.date, .hourAndMinute])
@@ -108,7 +157,6 @@ struct CommunityEventEditor: View {
                             }
                         }
                         .tint(EventEditorTheme.purple)
-
                         if let event = existing, !event.isCancelled {
                             Button(role: .destructive) {
                                 showCancelConfirmation = true
@@ -116,17 +164,13 @@ struct CommunityEventEditor: View {
                                 HStack(spacing: 12) {
                                     Image(systemName: "calendar.badge.minus")
                                         .font(.system(size: 18))
-
                                     VStack(alignment: .leading, spacing: 4) {
                                         Text("Cancel Event")
                                             .font(.system(size: 15, weight: .semibold))
-
                                         Text("Residents will see that this event is cancelled.")
                                             .font(.system(size: 12))
                                     }
-
                                     Spacer()
-
                                     Image(systemName: "chevron.right")
                                         .font(.system(size: 12, weight: .semibold))
                                 }
@@ -163,9 +207,9 @@ struct CommunityEventEditor: View {
             ToolbarItem(placement: .cancellationAction) {
                 Button("Cancel") { dismiss() }.disabled(saving)
             }
-            ToolbarItem(placement: .keyboard) {
-                Button("Done") { fieldFocused = false }
-            }
+//            ToolbarItem(placement: .keyboard) {
+//                Button("Done") { fieldFocused = false }
+//            }
         }
         .confirmationDialog(
             "Cancel this event?",
@@ -174,10 +218,8 @@ struct CommunityEventEditor: View {
         ) {
             Button("Cancel Event", role: .destructive) {
                 guard let event = existing else { return }
-
                 saving = true
                 errorMessage = nil
-
                 Task { @MainActor in
                     do {
                         try await store.cancelCommunityEvent(event)
@@ -185,7 +227,6 @@ struct CommunityEventEditor: View {
                     } catch {
                         errorMessage = error.localizedDescription
                     }
-
                     saving = false
                 }
             }
@@ -214,14 +255,12 @@ struct CommunityEventEditor: View {
             .background(.regularMaterial)
         }
     }
-
     private func caption(_ text: String) -> some View {
         Text(text)
             .font(.system(size: 11, weight: .bold))
             .tracking(0.6)
             .foregroundStyle(EventEditorTheme.muted)
     }
-
     private func counter(_ count: Int, maximum: Int) -> some View {
         HStack {
             Spacer()
@@ -230,7 +269,6 @@ struct CommunityEventEditor: View {
                 .foregroundStyle(count > maximum ? .red : EventEditorTheme.muted)
         }
     }
-
     private func card<Content: View>(_ title: String, icon: String,
                                      @ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 18) {
@@ -250,7 +288,6 @@ struct CommunityEventEditor: View {
         .background(.white, in: RoundedRectangle(cornerRadius: 21))
         .overlay(RoundedRectangle(cornerRadius: 21).stroke(Color.black.opacity(0.06)))
     }
-
     private func save() {
         guard valid && !saving else { return }
         fieldFocused = false
@@ -260,7 +297,8 @@ struct CommunityEventEditor: View {
             do {
                 try await store.saveCommunityEvent(
                     existing: existing, title: title, description: description,
-                    start: start, end: end, location: location, allowsRSVP: allowsRSVP
+                    start: start, end: end, location: location, allowsRSVP: allowsRSVP,
+                    coverData: coverData, removeCover: removeExistingCover
                 )
                 dismiss()
             } catch {
@@ -270,7 +308,6 @@ struct CommunityEventEditor: View {
         }
     }
 }
-
 private extension View {
     func eventEditorInput() -> some View {
         self.font(.system(size: 14))

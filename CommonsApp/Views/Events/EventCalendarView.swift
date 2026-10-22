@@ -1,6 +1,4 @@
 import SwiftUI
-
-
 private enum EventStyle {
     static let purple = Color(red: 0.46, green: 0.40, blue: 0.96)
     static let navy = Color(red: 0.12, green: 0.17, blue: 0.28)
@@ -8,27 +6,21 @@ private enum EventStyle {
     static let bg = Color(red: 0.965, green: 0.965, blue: 0.985)
     static let lavender = Color(red: 0.93, green: 0.91, blue: 1.0)
 }
-
 struct EventCalendarView: View {
     @EnvironmentObject private var store: AppStore
     @State private var displayedMonth = Calendar.current.startOfDay(for: Date())
     @State private var selectedDate = Calendar.current.startOfDay(for: Date())
     @State private var showCreateEvent = false
     private let calendar = Calendar.current
-
     private var selectedEvents: [BuildingEvent] {
         store.events.filter { calendar.isDate($0.date, inSameDayAs: selectedDate) }
             .sorted { $0.date < $1.date }
     }
-    
     private var upcomingEvents: [BuildingEvent] {
         store.events
             .filter { !$0.isCancelled && $0.date > Date() }
             .sorted { $0.date < $1.date }
     }
-
-
-
     var body: some View {
         ZStack {
             EventStyle.bg.ignoresSafeArea()
@@ -53,7 +45,6 @@ struct EventCalendarView: View {
         }
         .preferredColorScheme(.light)
     }
-
     private var header: some View {
         HStack(alignment: .center) {
             VStack(alignment: .leading, spacing: 7) {
@@ -81,7 +72,6 @@ struct EventCalendarView: View {
                 .accessibilityLabel("Community calendar")
         }
     }
-
     private var introduction: some View {
         HStack(spacing: 14) {
             Image(systemName: "sparkles")
@@ -102,7 +92,6 @@ struct EventCalendarView: View {
         .padding(16)
         .background(EventStyle.lavender.opacity(0.75), in: RoundedRectangle(cornerRadius: 22))
     }
-
     private var calendarCard: some View {
         VStack(spacing: 20) {
             HStack {
@@ -154,7 +143,6 @@ struct EventCalendarView: View {
         .background(.white, in: RoundedRectangle(cornerRadius: 26))
         .overlay(RoundedRectangle(cornerRadius: 26).stroke(EventStyle.navy.opacity(0.07)))
     }
-
     private func monthButton(_ icon: String, offset: Int) -> some View {
         Button {
             guard let newMonth = calendar.date(byAdding: .month, value: offset, to: displayedMonth) else { return }
@@ -168,7 +156,6 @@ struct EventCalendarView: View {
         }
         .buttonStyle(.plain)
     }
-
     private var monthCells: [Date?] {
         let parts = calendar.dateComponents([.year, .month], from: displayedMonth)
         guard let first = calendar.date(from: parts),
@@ -178,7 +165,6 @@ struct EventCalendarView: View {
         let dates = days.compactMap { calendar.date(byAdding: .day, value: $0 - 1, to: first) }
         return leading + dates.map { Optional($0) }
     }
-
     private func dayButton(_ date: Date) -> some View {
         let selected = calendar.isDate(date, inSameDayAs: selectedDate)
         let hasEvent = store.events.contains { !$0.isCancelled && calendar.isDate($0.date, inSameDayAs: date) }
@@ -199,7 +185,6 @@ struct EventCalendarView: View {
         }
         .buttonStyle(.plain)
     }
-
     private var daySection: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
@@ -242,7 +227,6 @@ struct EventCalendarView: View {
             }
         }
     }
-
     private var upcomingSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
@@ -269,108 +253,96 @@ struct EventCalendarView: View {
         }
     }
 }
-
 private struct EventRedesignedCard: View {
     @EnvironmentObject private var store: AppStore
-
     @ObservedObject private var reminderManager = EventReminderManager.shared
-
     @State private var reminderError = ""
     @State private var showReminderError = false
     @State private var isUpdatingReminder = false
-
     let event: BuildingEvent
-
+    private var canInteract: Bool {
+        !event.isCancelled && event.date > Date()
+    }
     var body: some View {
-        HStack(spacing: 13) {
-            VStack(spacing: 2) {
-                Text(event.date.formatted(.dateTime.month(.abbreviated)).uppercased())
-                    .font(.system(size: 10, weight: .bold)).foregroundStyle(EventStyle.purple)
-                Text(event.date.formatted(.dateTime.day()))
-                    .font(.system(size: 25, weight: .bold, design: .rounded))
-                    .foregroundStyle(EventStyle.navy)
-            }
-            .frame(width: 62, height: 72)
-            .background(EventStyle.lavender, in: RoundedRectangle(cornerRadius: 17))
-            VStack(alignment: .leading, spacing: 6) {
-                Text(event.title)
-                    .font(.system(size: 14, weight: .bold, design: .rounded))
-                    .foregroundStyle(EventStyle.navy)
-                    .lineLimit(2)
-                Label(event.date.formatted(date: .omitted, time: .shortened), systemImage: "clock")
-                Label(event.location, systemImage: "mappin")
-                if event.attendeeCount > 0 {
-                    Label("\(event.attendeeCount) attending", systemImage: "person.2")
+        VStack(alignment: .leading, spacing: 0) {
+            if event.coverId != nil {
+                GeometryReader { geometry in
+                    EventCoverImage(coverId: event.coverId)
+                        .frame(width: geometry.size.width, height: geometry.size.height)
+                        .clipped()
                 }
+                .frame(height: 150)
+                .clipShape(UnevenRoundedRectangle(topLeadingRadius: 20, topTrailingRadius: 20))
             }
-            .font(.system(size: 11))
-            .foregroundStyle(EventStyle.muted)
-            Spacer(minLength: 0)
-            VStack(spacing: 10) {
-                if event.isCancelled {
-                    Text("CANCELLED")
+            HStack(alignment: .top, spacing: 12) {
+                VStack(spacing: 2) {
+                    Text(event.date.formatted(.dateTime.month(.abbreviated)).uppercased())
                         .font(.system(size: 10, weight: .bold))
-                        .foregroundStyle(.red)
-                        .padding(.horizontal, 10).padding(.vertical, 7)
-                        .background(Color.red.opacity(0.09), in: Capsule())
-                }
-                if event.allowsRSVP &&
-                   !event.isCancelled &&
-                   event.date > Date() {
-                    Button { store.toggleRSVP(for: event) } label: {
-                        Text(event.isGoing ? "Going" : "RSVP")
-                            .font(.system(size: 11, weight: .bold))
-                            .foregroundStyle(event.isGoing ? Color(red: 0.13, green: 0.55, blue: 0.42) : EventStyle.purple)
-                            .padding(.horizontal, 12).padding(.vertical, 9)
-                            .background(event.isGoing ? Color(red: 0.87, green: 0.97, blue: 0.93) : EventStyle.lavender, in: Capsule())
-                    }.buttonStyle(.borderless)
-                }
-
-                if !event.isCancelled && event.date > Date() {
-                    Button {
-                        Task {
-                            isUpdatingReminder = true
-
-                            if reminderManager.hasReminder(for: event) {
-                                reminderManager.disableReminder(for: event)
-                            } else {
-                                do {
-                                    try await reminderManager.enableReminder(for: event)
-                                } catch {
-                                    reminderError = error.localizedDescription
-                                    showReminderError = true
-                                }
-                            }
-
-                            isUpdatingReminder = false
-                        }
-                    } label: {
-                        Label(
-                            reminderManager.hasReminder(for: event)
-                                ? "Reminder On"
-                                : "Remind Me",
-                            systemImage: reminderManager.hasReminder(for: event)
-                                ? "bell.fill"
-                                : "bell"
-                        )
-                        .font(.system(size: 10, weight: .semibold))
                         .foregroundStyle(EventStyle.purple)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 8)
-                        .background(EventStyle.lavender, in: Capsule())
+                    Text(event.date.formatted(.dateTime.day()))
+                        .font(.system(size: 24, weight: .bold, design: .rounded))
+                        .foregroundStyle(EventStyle.navy)
+                }
+                .frame(width: 56, height: 64)
+                .background(EventStyle.lavender, in: RoundedRectangle(cornerRadius: 15))
+                VStack(alignment: .leading, spacing: 7) {
+                    Text(event.title)
+                        .font(.system(size: 16, weight: .bold, design: .rounded))
+                        .foregroundStyle(EventStyle.navy)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Label(event.date.formatted(date: .omitted, time: .shortened), systemImage: "clock")
+                    Label(event.location, systemImage: "mappin.and.ellipse")
+                        .fixedSize(horizontal: false, vertical: true)
+                    if event.attendeeCount > 0 {
+                        Label("\(event.attendeeCount) attending", systemImage: "person.2")
+                    }
+                }
+                .font(.system(size: 12))
+                .foregroundStyle(EventStyle.muted)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(EventStyle.muted)
+                    .padding(.top, 22)
+            }
+            .padding(16)
+            if event.isCancelled {
+                Label("Event cancelled", systemImage: "xmark.circle.fill")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(.red)
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 14)
+            }
+            if canInteract {
+                HStack(spacing: 10) {
+                    if event.allowsRSVP {
+                        Button { store.toggleRSVP(for: event) } label: {
+                            Label(event.isGoing ? "Going" : "RSVP", systemImage: event.isGoing ? "checkmark.circle.fill" : "person.badge.plus")
+                                .frame(maxWidth: .infinity)
+                                .frame(height: 40)
+                                .foregroundStyle(event.isGoing ? Color(red: 0.13, green: 0.55, blue: 0.42) : EventStyle.purple)
+                                .background(event.isGoing ? Color(red: 0.87, green: 0.97, blue: 0.93) : EventStyle.lavender, in: RoundedRectangle(cornerRadius: 13))
+                        }
+                        .buttonStyle(.borderless)
+                    }
+                    Button { toggleReminder() } label: {
+                        Label(reminderManager.hasReminder(for: event) ? "Reminder On" : "Remind Me", systemImage: reminderManager.hasReminder(for: event) ? "bell.fill" : "bell")
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 40)
+                            .foregroundStyle(EventStyle.purple)
+                            .background(EventStyle.lavender, in: RoundedRectangle(cornerRadius: 13))
                     }
                     .buttonStyle(.borderless)
                     .disabled(isUpdatingReminder)
                 }
-
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(EventStyle.muted)
-
+                .font(.system(size: 12, weight: .semibold))
+                .padding(.horizontal, 16)
+                .padding(.bottom, 16)
             }
         }
-        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .background(.white, in: RoundedRectangle(cornerRadius: 22))
+        .clipShape(RoundedRectangle(cornerRadius: 22))
         .overlay(RoundedRectangle(cornerRadius: 22).stroke(EventStyle.navy.opacity(0.07)))
         .alert("Event Reminder", isPresented: $showReminderError) {
             Button("OK", role: .cancel) {}
@@ -378,8 +350,23 @@ private struct EventRedesignedCard: View {
             Text(reminderError)
         }
     }
+    private func toggleReminder() {
+        Task {
+            isUpdatingReminder = true
+            if reminderManager.hasReminder(for: event) {
+                reminderManager.disableReminder(for: event)
+            } else {
+                do {
+                    try await reminderManager.enableReminder(for: event)
+                } catch {
+                    reminderError = error.localizedDescription
+                    showReminderError = true
+                }
+            }
+            isUpdatingReminder = false
+        }
+    }
 }
-
 #Preview {
     NavigationStack { EventCalendarView().environmentObject(AppStore()) }
 }

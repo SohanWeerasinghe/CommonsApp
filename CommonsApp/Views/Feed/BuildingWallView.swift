@@ -1,4 +1,6 @@
 import SwiftUI
+import FirebaseFirestore
+import UIKit
 private enum WallStyle {
     static let navy = Theme.appNavy
     static let purple = Theme.appPurple
@@ -327,6 +329,49 @@ struct LatestPostSection: View {
         }
     }
 }
+private struct CommunityPostPhotoView: View {
+    let photoId: String
+    @State private var image: UIImage?
+    @State private var loadFailed = false
+    var body: some View {
+        Group {
+            if let image {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(maxWidth: .infinity)
+                    .clipShape(RoundedRectangle(cornerRadius: 14))
+            } else if loadFailed {
+                Label("Photo unavailable", systemImage: "photo")
+                    .font(Theme.ui(12))
+                    .foregroundStyle(WallStyle.muted)
+            } else {
+                ProgressView()
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 100)
+            }
+        }
+        .task(id: photoId) {
+            image = nil
+            loadFailed = false
+            do {
+                let document = try await Firestore.firestore()
+                    .collection("residentPostPhotos")
+                    .document(photoId)
+                    .getDocument()
+                guard let base64 = document.data()?["imageBase64"] as? String,
+                      let data = Data(base64Encoded: base64),
+                      let decoded = UIImage(data: data) else {
+                    loadFailed = true
+                    return
+                }
+                image = decoded
+            } catch {
+                loadFailed = true
+            }
+        }
+    }
+}
 struct LatestPostCard: View {
     let post: Post
     var body: some View {
@@ -355,6 +400,9 @@ struct LatestPostCard: View {
                 .font(Theme.ui(14))
                 .foregroundStyle(WallStyle.navy)
                 .fixedSize(horizontal: false, vertical: true)
+            if let photoId = post.photoId {
+                CommunityPostPhotoView(photoId: photoId)
+            }
             HStack {
                 Text(post.category.rawValue.uppercased())
                     .font(Theme.ui(10, weight: .bold))
@@ -507,11 +555,15 @@ struct UpcomingEventSection: View {
                 LazyVStack(spacing: 12) {
                     ForEach(upcoming.prefix(3)) { event in
                         HStack(spacing: 13) {
+                            if event.coverId != nil {
+                                EventCoverImage(coverId: event.coverId).frame(width: 48, height: 48).clipShape(RoundedRectangle(cornerRadius: 15))
+                            } else {
                             Image(systemName: "calendar.badge.clock")
                                 .font(.system(size: 20))
                                 .foregroundStyle(WallStyle.purple)
                                 .frame(width: 48, height: 48)
                                 .background(WallStyle.soft, in: RoundedRectangle(cornerRadius: 15))
+                            }
                             VStack(alignment: .leading, spacing: 5) {
                                 Text(event.title)
                                     .font(Theme.ui(14, weight: .bold))
