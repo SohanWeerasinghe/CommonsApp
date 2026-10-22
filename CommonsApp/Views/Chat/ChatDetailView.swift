@@ -4,17 +4,12 @@
 //
 //  Created by Sohan Weerasinghe on 21/9/2026.
 //
-
 import SwiftUI
-
+import FirebaseAuth
 struct ChatDetailView: View {
-
     @EnvironmentObject var store: AppStore
-
     let thread: ChatThread
-
     @State private var messageText = ""
-
     var body: some View {
         ZStack {
             LinearGradient(
@@ -23,26 +18,22 @@ struct ChatDetailView: View {
                 endPoint: .bottom
             )
             .ignoresSafeArea()
-
             VStack(spacing: 0) {
-
                 // Chat header
                 ChatDetailHeader(
                     name: thread.neighborName,
-                    unit: thread.neighborUnit
+                    unit: thread.neighborUnit,
+                    residentUID: thread.neighborUID
                 )
-
                 // Context card
                 if let note = thread.contextNote {
                     HStack(spacing: 10) {
                         Image(systemName: "arrow.left.arrow.right")
                             .font(.system(size: 13, weight: .semibold))
                             .foregroundStyle(Theme.appPurple)
-
                         Text(note)
                             .font(Theme.ui(12, weight: .medium))
                             .foregroundStyle(Theme.appNavy)
-
                         Spacer()
                     }
                     .padding(.horizontal, 14)
@@ -52,35 +43,32 @@ struct ChatDetailView: View {
                     .padding(.horizontal, 16)
                     .padding(.top, 12)
                 }
-
                 // Messages
                 ScrollViewReader { scrollProxy in
                     ScrollView {
                         VStack(spacing: 14) {
                             let currentThread = getCurrentThread()
-
                             if currentThread.messages.isEmpty {
                                 VStack(spacing: 10) {
                                     Image(systemName: "bubble.left.and.bubble.right")
                                         .font(.system(size: 34))
                                         .foregroundStyle(Theme.appPurple.opacity(0.5))
-
                                     Text("No messages yet")
                                         .font(Theme.display(17, weight: .bold))
                                         .foregroundStyle(Theme.appNavy)
-
                                     Text("Say hello to \(thread.neighborName).")
                                         .font(Theme.ui(13))
                                         .foregroundStyle(Theme.appMuted)
                                 }
                                 .frame(maxWidth: .infinity)
                                 .padding(.top, 60)
-
                             } else {
                                 ForEach(currentThread.messages) { message in
                                     MessageBubble(
                                         message: message,
-                                        neighborUnit: thread.neighborUnit
+                                        neighborUnit: thread.neighborUnit,
+                                        neighborName: thread.neighborName,
+                                        neighborUID: thread.neighborUID
                                     )
                                     .id(message.id)
                                 }
@@ -99,7 +87,6 @@ struct ChatDetailView: View {
                         }
                     }
                 }
-
                 // Message composer
                 MessageComposer(
                     messageText: $messageText,
@@ -109,7 +96,6 @@ struct ChatDetailView: View {
                 }
             }
         }
-
         //Turn on/off chat listner from firebase
         .toolbar(.hidden, for: .navigationBar)
         .onAppear {
@@ -122,38 +108,30 @@ struct ChatDetailView: View {
             store.setActiveChat(nil)
         }
     }
-
     func getCurrentThread() -> ChatThread {
         for currentThread in store.chatThreads {
             if currentThread.id == thread.id {
                 return currentThread
             }
         }
-
         return thread
     }
    func sendMessage() {
         let trimmedMessage = messageText.trimmingCharacters(in: .whitespacesAndNewlines)
-
         if trimmedMessage.isEmpty {
             return
         }
-
         store.send(text: trimmedMessage, in: thread)
         messageText = ""
     }
 }
-
 private struct ChatDetailHeader: View {
-
     @Environment(\.dismiss) private var dismiss
-
     let name: String
     let unit: String
-
+    let residentUID: String?
     var body: some View {
         HStack(spacing: 12) {
-
             Button {
                 dismiss()
             } label: {
@@ -165,21 +143,16 @@ private struct ChatDetailHeader: View {
                     .clipShape(Circle())
             }
             .buttonStyle(.plain)
-
-            UnitBadge(unit: unit, size: 42)
-
+            ChatResidentAvatar(name: name, unit: unit, size: 42, residentUID: residentUID)
             VStack(alignment: .leading, spacing: 2) {
                 Text(name)
                     .font(Theme.ui(15, weight: .bold))
                     .foregroundStyle(Theme.appNavy)
-
                 Text("Unit \(unit)")
                     .font(Theme.ui(11))
                     .foregroundStyle(Theme.appMuted)
             }
-
             Spacer()
-
             Button {
                 // Calling functionality can be connected later.
             } label: {
@@ -191,7 +164,6 @@ private struct ChatDetailHeader: View {
                     .clipShape(Circle())
             }
             .buttonStyle(.plain)
-
             Button {
                 // Conversation options can be connected later.
             } label: {
@@ -209,21 +181,19 @@ private struct ChatDetailHeader: View {
         .padding(.bottom, 10)
     }
 }
-
 private struct MessageBubble: View {
-
+    @EnvironmentObject private var store: AppStore
     let message: ChatMessage
     let neighborUnit: String
-
+    let neighborName: String
+    let neighborUID: String?
     var body: some View {
         HStack(alignment: .bottom, spacing: 8) {
-
             if message.isMine {
                 Spacer(minLength: 55)
             } else {
-                UnitBadge(unit: neighborUnit, size: 30)
+                ChatResidentAvatar(name: neighborName, unit: neighborUnit, size: 30, residentUID: neighborUID)
             }
-
             VStack(
                 alignment: message.isMine ? .trailing : .leading,
                 spacing: 5
@@ -243,32 +213,25 @@ private struct MessageBubble: View {
                                 .stroke(Theme.appBorder, lineWidth: 1)
                         }
                     }
-
                 Text(message.timestamp.chatRelativeDescription)
                     .font(Theme.ui(9))
                     .foregroundStyle(Theme.appMuted)
             }
             .frame(maxWidth: 260, alignment: message.isMine ? .trailing : .leading)
-
             if message.isMine {
-                ResidentAvatar(initials: "ME", size: 30)
+                ChatResidentAvatar(name: store.currentResident.name, unit: store.currentResident.unit, size: 30, residentUID: Auth.auth().currentUser?.uid)
             } else {
                 Spacer(minLength: 55)
             }
         }
     }
 }
-
 private struct MessageComposer: View {
-
     @Binding var messageText: String
-
     let neighborName: String
     let sendMessage: () -> Void
-
     var body: some View {
         HStack(spacing: 8) {
-
             Button {
                 // Photo picker can be connected later.
             } label: {
@@ -278,7 +241,6 @@ private struct MessageComposer: View {
                     .frame(width: 34, height: 34)
             }
             .buttonStyle(.plain)
-
             TextField("Message \(neighborName)...", text: $messageText)
                 .font(Theme.ui(13))
                 .foregroundStyle(Theme.appNavy)
@@ -286,7 +248,6 @@ private struct MessageComposer: View {
                 .onSubmit {
                     sendMessage()
                 }
-
             Button {
                 // Voice recording can be connected later.
             } label: {
@@ -296,7 +257,6 @@ private struct MessageComposer: View {
                     .frame(width: 32, height: 32)
             }
             .buttonStyle(.plain)
-
             Button {
                 sendMessage()
             } label: {

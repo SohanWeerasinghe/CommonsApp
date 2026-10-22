@@ -20,10 +20,13 @@ struct EventCalendarView: View {
         store.events.filter { calendar.isDate($0.date, inSameDayAs: selectedDate) }
             .sorted { $0.date < $1.date }
     }
+    
     private var upcomingEvents: [BuildingEvent] {
-        store.events.filter { !$0.isCancelled && $0.date >= calendar.startOfDay(for: Date()) }
+        store.events
+            .filter { !$0.isCancelled && $0.date > Date() }
             .sorted { $0.date < $1.date }
     }
+
 
 
     var body: some View {
@@ -380,6 +383,3 @@ private struct EventRedesignedCard: View {
 #Preview {
     NavigationStack { EventCalendarView().environmentObject(AppStore()) }
 }
-
-
-// Administrator event creation and editing.

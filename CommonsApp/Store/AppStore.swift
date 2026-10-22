@@ -4,24 +4,21 @@
 //
 //  Created by Sohan Weerasinghe on 21/9/2026.
 //
-
 import Foundation
 import SwiftUI
 import Combine
 import LocalAuthentication
 import FirebaseAuth
 import FirebaseFirestore
-
+import WidgetKit
 final class AppStore: ObservableObject {
     //Onboarding
     @Published var onboardingStage: OnboardingStage = .loading
     @Published var pendingEmail: String = ""
     @Published var currentResident = Resident(name: "", unit: "")
-
     //Feed
     @Published var posts: [Post] = []
     @Published var eventNoticePosts: [Post] = []
-
     //Lend & Borrow
     @Published var items: [SharedItem] = []
     @Published var reservedSharedItemIds: Set<String> = []
@@ -29,14 +26,11 @@ final class AppStore: ObservableObject {
     @Published var borrowRequests: [BorrowRequest] = []
     @Published var borrowRequestsError: String? = nil
     private var borrowRequestsListener: ListenerRegistration?
-
     //Events
     @Published var events: [BuildingEvent] = []
     @Published var eventsError: String? = nil
     private var eventsListener: ListenerRegistration?
     private var eventAttendeeListeners: [String: ListenerRegistration] = [:]
-
-
     //Service Hub
     @Published var maintenanceRequests: [MaintenanceRequest] = []
     @Published var maintenanceError: String? = nil
@@ -50,15 +44,11 @@ final class AppStore: ObservableObject {
     @Published var gymError: String? = nil
     private var gymSlotsListener: ListenerRegistration?
     private var gymSettingsListener: ListenerRegistration?
-
     //Chat
     @Published var chatThreads: [ChatThread] = []
-
     @Published var incomingChatNotification: ChatNotification? = nil
-
     private var initializedChatListeners: Set<String> = []
     private var activeChatId: String? = nil
-
     //Admin
     @Published var pendingResidents: [PendingResident] = []
     @Published var pinnedAnnouncementText: String = ""
@@ -68,56 +58,42 @@ final class AppStore: ObservableObject {
     @Published var sharedItemsError: String? = nil
     private var chatDirectory: [String: (name: String, unit: String)] = [:]
     private var chatThreadsListener: ListenerRegistration?
+    private var chatDirectoryListener: ListenerRegistration?
     private var chatMessageListeners: [String: ListenerRegistration] = [:]
-
     //Settings
     @Published var offlineCache: [OfflineCacheItem] = []
     @Published private(set) var appLockEnabled: Bool = false
     @Published var isLocked: Bool = false
-
     private let appLockPreferenceKey = "commonsAppLockEnabled"
     @Published private(set) var appLockDelay: Int = 0
-
     private let appLockDelayPreferenceKey = "commonsAppLockDelay"
     private var appLeftForegroundAt: Date?
-
     //Demo
     @Published var isManagerMode: Bool = false
-
-
-
     //Sample data loading
-
     init() {
         appLockEnabled = UserDefaults.standard.bool(forKey: appLockPreferenceKey)
         isLocked = appLockEnabled
         appLockDelay = UserDefaults.standard.integer(
             forKey: appLockDelayPreferenceKey
         )
-
         seedSampleData()
     }
-
     //Onboarding Actions
-
     func sendMagicLink() {
         // Replaced by Firebase email/password registration.
         // Authentication will be handled by the sign-in form.
     }
-
     @MainActor
     func checkEmailVerification() async throws -> Bool {
         guard let user = Auth.auth().currentUser else {
             onboardingStage = .signIn
             return false
         }
-
         try await user.reload()
-
         guard user.isEmailVerified else {
             return false
         }
-
         try await loadResidentAccountStatus()
         return true
     }
@@ -125,7 +101,6 @@ final class AppStore: ObservableObject {
     @MainActor
     func signOutResident() throws {
         try Auth.auth().signOut()
-
         // Stop Firestore listeners.
         stopAnnouncementListener()
         stopResidentPostsListener()
@@ -137,7 +112,6 @@ final class AppStore: ObservableObject {
         unpublishedSharedItemIds.removeAll()
         stopChatListeners()
         chatDirectory.removeAll()
-
         stopEventsListener()
         stopMaintenanceListener()
         stopGymListeners()
@@ -145,17 +119,14 @@ final class AppStore: ObservableObject {
         maintenanceError = nil
         events.removeAll()
         eventsError = nil
-
         // Clear data from the previous resident's session.
         pinnedAnnouncementText = ""
         posts.removeAll()
         eventNoticePosts.removeAll()
         chatThreads.removeAll()
-
         pendingEmail = ""
         currentResident = Resident(name: "", unit: "")
         onboardingStage = .signIn
-
         // Refresh the widget after clearing the announcement.
         saveDataForWidget()
     }
@@ -165,7 +136,6 @@ final class AppStore: ObservableObject {
             onboardingStage = .signIn
             return
         }
-
         do {
             try await loadResidentAccountStatus()
         } catch {
@@ -173,7 +143,6 @@ final class AppStore: ObservableObject {
             onboardingStage = .signIn
         }
     }
-
     //checks the signed-in resident's Firestore profile and routes them correctly
     @MainActor
     func loadResidentAccountStatus() async throws {
@@ -181,14 +150,10 @@ final class AppStore: ObservableObject {
             onboardingStage = .signIn
             return
         }
-
         try await user.reload()
-
         // Check the administrator role using Firebase's verified ID token.
         let tokenResult = try await user.getIDTokenResult(forcingRefresh: true)
-
         let isAdmin = tokenResult.claims["admin"] as? Bool == true
-
         if isAdmin {
             onboardingStage = .admin
             startEventsListener()
@@ -196,22 +161,18 @@ final class AppStore: ObservableObject {
             startGymListeners()
             return
         }
-
         let document = try await Firestore.firestore()
             .collection("users")
             .document(user.uid)
             .getDocument(source: .server)
-
         guard document.exists, let data = document.data() else {
             onboardingStage = .profileSetup
             return
         }
-
         let name = data["name"] as? String ?? ""
         let unit = data["unit"] as? String ?? ""
         let phone = data["phone"] as? String ?? ""
         let showUnit = data["showUnitToNeighbors"] as? Bool ?? true
-
         currentResident = Resident(
             name: name,
             unit: unit,
@@ -219,11 +180,8 @@ final class AppStore: ObservableObject {
             contactPreference: .push,
             showUnitToNeighbors: showUnit
         )
-
         pendingEmail = user.email ?? ""
-
         let approvalStatus = data["approvalStatus"] as? String ?? "pending"
-
         if !user.isEmailVerified {
             onboardingStage = .waitingRoom
         } else {
@@ -242,9 +200,7 @@ final class AppStore: ObservableObject {
             }
         }
     }
-
     //use to save the user data to firestore
-
     @MainActor
     func saveResidentProfile(
         name: String,
@@ -263,11 +219,9 @@ final class AppStore: ObservableObject {
                 ]
             )
         }
-
         print("PROFILE DEBUG - Auth UID:", user.uid,
               "Email:", email,
               "Verified:", user.isEmailVerified)
-
         let profileData: [String: Any] = [
             "name": name.trimmingCharacters(in: .whitespacesAndNewlines),
             "unit": unit.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -278,13 +232,10 @@ final class AppStore: ObservableObject {
             "approvalStatus": "pending",
             "createdAt": FieldValue.serverTimestamp()
         ]
-
         let profileReference = Firestore.firestore()
             .collection("users")
             .document(user.uid)
-
         try await profileReference.setData(profileData)
-
         currentResident = Resident(
             name: name,
             unit: unit,
@@ -292,15 +243,12 @@ final class AppStore: ObservableObject {
             contactPreference: preference,
             showUnitToNeighbors: showUnit
         )
-
         pendingEmail = email
         onboardingStage = .waitingRoom
     }
-
     // Load pending resident applications for the administrator.
     @MainActor
     func loadPendingResidents() async throws {
-
         guard let user = Auth.auth().currentUser else {
             throw NSError(
                 domain: "CommonsApp",
@@ -310,9 +258,7 @@ final class AppStore: ObservableObject {
                 ]
             )
         }
-
         let tokenResult = try await user.getIDTokenResult(forcingRefresh: true)
-
         guard tokenResult.claims["admin"] as? Bool == true else {
             throw NSError(
                 domain: "CommonsApp",
@@ -322,22 +268,17 @@ final class AppStore: ObservableObject {
                 ]
             )
         }
-
         let snapshot = try await Firestore.firestore()
             .collection("users")
             .whereField("approvalStatus", isEqualTo: "pending")
             .getDocuments(source: .server)
-
         pendingResidents = snapshot.documents.compactMap { document in
             let data = document.data()
-
             guard let name = data["name"] as? String,
                   let unit = data["unit"] as? String else {
                 return nil
             }
-
             let requestedAt = (data["createdAt"] as? Timestamp)?.dateValue() ?? Date()
-
             return PendingResident(
                 id: document.documentID,
                 name: name,
@@ -346,14 +287,12 @@ final class AppStore: ObservableObject {
             )
         }
     }
-
     // Approve or decline a pending resident.
     @MainActor
     func updateResidentApproval(
         residentID: String,
         approve: Bool
     ) async throws {
-
         guard let user = Auth.auth().currentUser else {
             throw NSError(
                 domain: "CommonsApp",
@@ -363,9 +302,7 @@ final class AppStore: ObservableObject {
                 ]
             )
         }
-
         let tokenResult = try await user.getIDTokenResult(forcingRefresh: true)
-
         guard tokenResult.claims["admin"] as? Bool == true else {
             throw NSError(
                 domain: "CommonsApp",
@@ -375,28 +312,22 @@ final class AppStore: ObservableObject {
                 ]
             )
         }
-
         let status = approve ? "approved" : "declined"
-
         try await Firestore.firestore()
             .collection("users")
             .document(residentID)
             .updateData([
                 "approvalStatus": status
             ])
-
         try await loadPendingResidents()
     }
-
     //Feed Actions
-
     func addPost(text: String, category: Post.Category, hasPhoto: Bool) {
         // Figure out the name to use (default to "You" if empty)
         var authorName = currentResident.name
         if authorName.isEmpty {
             authorName = "You"
         }
-
         let post = Post(
             authorName: authorName,
             authorUnit: currentResident.unit,
@@ -405,18 +336,15 @@ final class AppStore: ObservableObject {
             text: text,
             hasPhoto: hasPhoto
         )
-
         // Add the new post to the top of the list
         posts.insert(post, at: 0)
     }
-
     func saveResidentPostToFirestore(
         text: String,
         category: Post.Category,
         showAuthorName: Bool,
         showAuthorUnit: Bool
     ) async throws {
-
         guard let user = Auth.auth().currentUser else {
             throw NSError(
                 domain: "CommonsApp",
@@ -426,7 +354,6 @@ final class AppStore: ObservableObject {
                 ]
             )
         }
-
         guard category == .news || category == .askForHelp else {
             throw NSError(
                 domain: "CommonsApp",
@@ -437,11 +364,9 @@ final class AppStore: ObservableObject {
                 ]
             )
         }
-
         let trimmedText = text.trimmingCharacters(
             in: .whitespacesAndNewlines
         )
-
         guard !trimmedText.isEmpty && trimmedText.count <= 2000 else {
             throw NSError(
                 domain: "CommonsApp",
@@ -452,12 +377,10 @@ final class AppStore: ObservableObject {
                 ]
             )
         }
-
         let profile = try await Firestore.firestore()
             .collection("users")
             .document(user.uid)
             .getDocument(source: .server)
-
         guard let profileData = profile.data(),
               profileData["approvalStatus"] as? String == "approved" else {
             throw NSError(
@@ -468,16 +391,13 @@ final class AppStore: ObservableObject {
                 ]
             )
         }
-
         let name = profileData["name"] as? String ?? ""
         let unit = profileData["unit"] as? String ?? ""
         let unitAllowed = profileData["showUnitToNeighbors"] as? Bool == true
-
         let visibleName = showAuthorName ? name : ""
         let visibleUnit = showAuthorName && showAuthorUnit && unitAllowed
             ? unit
             : ""
-
         try await Firestore.firestore()
             .collection("posts")
             .addDocument(data: [
@@ -491,54 +411,41 @@ final class AppStore: ObservableObject {
                 "authorUnit": visibleUnit
             ])
     }
-
     func startResidentPostsListener() {
         guard residentPostsListener == nil else { return }
         guard Auth.auth().currentUser != nil else { return }
-
         residentPostsListener = Firestore.firestore()
             .collection("posts")
             .order(by: "createdAt", descending: true)
             .limit(to: 50)
             .addSnapshotListener { [weak self] snapshot, error in
-
                 if let error = error {
                     print("Resident posts listener error: \(error.localizedDescription)")
                     return
                 }
-
                 guard let documents = snapshot?.documents else { return }
-
                 Task { @MainActor in
                     guard let self = self else { return }
-
                     let residentPosts: [Post] = documents.compactMap { document in
                         let data = document.data()
-
                         guard let text = data["text"] as? String,
                               let categoryString = data["category"] as? String,
                               let category = Post.Category(rawValue: categoryString)
                         else {
                             return nil
                         }
-
                         let timestamp = (data["createdAt"] as? Timestamp)?
                             .dateValue() ?? Date()
-
                         let showName = data["showAuthorName"] as? Bool == true
                         let showUnit = data["showAuthorUnit"] as? Bool == true
-
                         let savedName = data["authorName"] as? String ?? ""
                         let savedUnit = data["authorUnit"] as? String ?? ""
-
                         let displayName = showName && !savedName.isEmpty
                             ? savedName
                             : "Anonymous User"
-
                         let displayUnit = showName && showUnit
                             ? savedUnit
                             : ""
-
                         return Post(
                             authorName: displayName,
                             authorUnit: displayUnit,
@@ -547,82 +454,82 @@ final class AppStore: ObservableObject {
                             text: text
                         )
                     }
-
                     // Keep administrator announcements separate.
                     self.posts.removeAll { !$0.isPinned }
                     self.posts.append(contentsOf: residentPosts)
                 }
             }
     }
-
     func stopResidentPostsListener() {
         residentPostsListener?.remove()
         residentPostsListener = nil
     }
-
     func stopChatListeners() {
+        chatDirectoryListener?.remove()
+        chatDirectoryListener = nil
+        chatDirectory.removeAll()
         chatThreadsListener?.remove()
         chatThreadsListener = nil
-
         for listener in chatMessageListeners.values {
             listener.remove()
         }
-
         chatMessageListeners.removeAll()
         initializedChatListeners.removeAll()
         activeChatId = nil
         incomingChatNotification = nil
     }
-
+    @MainActor
+    private func startChatDirectoryListener() {
+        guard chatDirectoryListener == nil else { return }
+        guard onboardingStage == .active else { return }
+        guard let uid = Auth.auth().currentUser?.uid else { return }
+        chatDirectoryListener = Firestore.firestore().collection("residentDirectory")
+            .addSnapshotListener { [weak self] snapshot, error in
+                if let error {
+                    print("Resident directory listener error: \(error.localizedDescription)")
+                    return
+                }
+                guard let documents = snapshot?.documents else { return }
+                Task { @MainActor [weak self] in
+                    guard let self, Auth.auth().currentUser?.uid == uid,
+                          self.onboardingStage == .active else { return }
+                    var directory: [String: (name: String, unit: String)] = [:]
+                    for document in documents {
+                        let data = document.data()
+                        guard let name = data["name"] as? String, !name.isEmpty else { continue }
+                        directory[document.documentID] = (name: name, unit: data["unit"] as? String ?? "")
+                    }
+                    self.chatDirectory = directory
+                    for index in self.chatThreads.indices {
+                        guard let neighborUID = self.chatThreads[index].neighborUID,
+                              let resident = directory[neighborUID] else { continue }
+                        self.chatThreads[index].neighborName = resident.name
+                        self.chatThreads[index].neighborUnit = resident.unit
+                    }
+                }
+            }
+    }
     @MainActor
     func startChatThreadsListener() {
         guard chatThreadsListener == nil else { return }
         guard onboardingStage == .active else { return }
         guard let uid = Auth.auth().currentUser?.uid else { return }
-
+        startChatDirectoryListener()
         chatThreadsListener = Firestore.firestore()
             .collection("chats")
             .whereField("participantIds", arrayContains: uid)
             .addSnapshotListener { [weak self] snapshot, error in
-
                 if let error = error {
                     print("Chat listener error: \(error.localizedDescription)")
                     return
                 }
-
                 guard let documents = snapshot?.documents else { return }
-
                 Task { @MainActor [weak self] in
                     guard let self = self else { return }
                     guard Auth.auth().currentUser?.uid == uid else { return }
                     guard self.onboardingStage == .active else { return }
-
-                    // Resolve only public, approved-resident directory fields.
-
-                    do {
-
-                        let directory = try await Firestore.firestore()
-
-                            .collection("residentDirectory").getDocuments()
-
-                        self.chatDirectory = Dictionary(uniqueKeysWithValues: directory.documents.compactMap { doc -> (String, (name: String, unit: String))? in
-
-                            guard let name = doc.data()["name"] as? String, !name.isEmpty else { return nil }
-
-                            return (doc.documentID, (name: name, unit: doc.data()["unit"] as? String ?? ""))
-
-                        })
-
-                    } catch {
-
-                        print("Directory lookup failed: \(error.localizedDescription)")
-
-                    }
-
-
                     let threads: [ChatThread] = documents.compactMap { document in
                         let data = document.data()
-
                         guard let participants = data["participantIds"] as? [String],
                               participants.count == 2,
                               participants.contains(uid),
@@ -630,13 +537,11 @@ final class AppStore: ObservableObject {
                         else {
                             return nil
                         }
-
                         // Names and units are not available in the current
                         // chat schema. Do not expose private user profiles.
                         let existing = self.chatThreads.first {
                             $0.firestoreId == document.documentID
                         }
-
                         var thread = ChatThread(
                             neighborName: self.chatDirectory[neighborUID]?.name ?? existing?.neighborName ?? "Resident",
                             neighborUnit: self.chatDirectory[neighborUID]?.unit ?? existing?.neighborUnit ?? "",
@@ -645,21 +550,16 @@ final class AppStore: ObservableObject {
                             firestoreId: document.documentID,
                             neighborUID: neighborUID
                         )
-
                         if let existing {
                             thread.id = existing.id
                         }
-
                         return thread
                     }
-
                     self.chatThreads = threads
                     let chatIds = Set(threads.compactMap { $0.firestoreId })
-
                     for chatId in chatIds {
                         self.startChatMessagesListener(chatId: chatId)
                     }
-
                     for chatId in Array(self.chatMessageListeners.keys) {
                         if !chatIds.contains(chatId) {
                             self.stopChatMessagesListener(chatId: chatId)
@@ -668,69 +568,53 @@ final class AppStore: ObservableObject {
                 }
             }
     }
-
     @MainActor
     func startChatMessagesListener(chatId: String) {
         guard chatMessageListeners[chatId] == nil else { return }
         guard onboardingStage == .active else { return }
         guard let uid = Auth.auth().currentUser?.uid else { return }
-
         let listener = Firestore.firestore()
             .collection("chats")
             .document(chatId)
             .collection("messages")
             .order(by: "createdAt")
             .addSnapshotListener { [weak self] snapshot, error in
-
                 if let error = error {
                     print("Chat messages listener error: \(error.localizedDescription)")
                     return
                 }
-
                 guard let documents = snapshot?.documents else { return }
-
                 Task { @MainActor [weak self] in
                     guard let self = self else { return }
                     guard Auth.auth().currentUser?.uid == uid else { return }
                     guard self.onboardingStage == .active else { return }
                     guard self.chatMessageListeners[chatId] != nil else { return }
-
                     guard let threadIndex = self.chatThreads.firstIndex(where: {
                         $0.firestoreId == chatId
                     }) else {
                         return
                     }
-
                     let existingMessages = self.chatThreads[threadIndex].messages
-
-
                     print("CHAT DEBUG: Message snapshot received for \(chatId)")
                     print("CHAT DEBUG: Documents = \(documents.count)")
                     print("CHAT DEBUG: Changes = \(snapshot?.documentChanges.count ?? 0)")
-
                     let isFirstSnapshot = !self.initializedChatListeners.contains(chatId)
-
                     if isFirstSnapshot {
                         self.initializedChatListeners.insert(chatId)
                     }
-
                     if !isFirstSnapshot && self.activeChatId != chatId {
                         let existingMessageIds = Set(
                             existingMessages.compactMap { $0.firestoreId }
                         )
-
                         for change in snapshot?.documentChanges ?? [] {
                             if change.type != .added {
                                 continue
                             }
-
                             let document = change.document
                             let data = document.data()
-
                             if existingMessageIds.contains(document.documentID) {
                                 continue
                             }
-
                             guard let senderId = data["senderId"] as? String,
                                   senderId != uid,
                                   let text = data["text"] as? String,
@@ -738,11 +622,8 @@ final class AppStore: ObservableObject {
                             else {
                                 continue
                             }
-
                             let senderName = self.chatThreads[threadIndex].neighborName
-
                             print("CHAT NOTIFICATION: \(senderName): \(text)")
-
                             self.incomingChatNotification = ChatNotification(
                                 id: document.documentID,
                                 chatId: chatId,
@@ -751,50 +632,39 @@ final class AppStore: ObservableObject {
                             )
                         }
                     }
-
                     let messages: [ChatMessage] = documents.compactMap { document in
                         let data = document.data()
-
                         guard let senderId = data["senderId"] as? String,
                               let text = data["text"] as? String
                         else {
                             return nil
                         }
-
                         let timestamp = (data["createdAt"] as? Timestamp)?
                             .dateValue() ?? Date()
-
                         let existing = existingMessages.first {
                             $0.firestoreId == document.documentID
                         }
-
                         var message = ChatMessage(
                             text: text,
                             isMine: senderId == uid,
                             timestamp: timestamp,
                             firestoreId: document.documentID
                         )
-
                         if let existing {
                             message.id = existing.id
                         }
-
                         return message
                     }
-
                     self.chatThreads[threadIndex].messages = messages
                 }
             }
-
         chatMessageListeners[chatId] = listener
     }
-
     func stopChatMessagesListener(chatId: String) {
         chatMessageListeners[chatId]?.remove()
         chatMessageListeners.removeValue(forKey: chatId)
         initializedChatListeners.remove(chatId)
     }
-
     func toggleLike(_ post: Post) {
         // Find the matching post and add 1 like
         for index in 0..<posts.count {
@@ -804,7 +674,6 @@ final class AppStore: ObservableObject {
             }
         }
     }
-
     //Prevents creating a conversation with me
     @MainActor
     func createChat(with neighborUID: String) async throws -> String {
@@ -819,18 +688,14 @@ final class AppStore: ObservableObject {
                 ]
             )
         }
-
         let participants = [currentUID, neighborUID].sorted()
-
         // Deterministic, collision-free ID for a pair of Firebase UIDs.
         let chatId = participants
             .map { "\($0.utf8.count)_\($0)" }
             .joined(separator: "_")
-
         let chatReference = Firestore.firestore()
             .collection("chats")
             .document(chatId)
-
         // Check whether this conversation already exists.
         do {
             try await chatReference.setData([
@@ -845,12 +710,9 @@ final class AppStore: ObservableObject {
                 throw error
             }
         }
-
         return chatId
     }
-
     //Lend & Borrow
-
     @MainActor
     func startSharedItemsListener() {
         guard sharedItemsListener == nil, onboardingStage == .active,
@@ -892,12 +754,10 @@ final class AppStore: ObservableObject {
                 }
             }
     }
-
     func stopSharedItemsListener() {
         sharedItemsListener?.remove()
         sharedItemsListener = nil
     }
-
     @MainActor
     func publishSharedItem(name: String, detail: String, status: SharedItem.Status,
                            availability: String) async throws {
@@ -928,7 +788,6 @@ final class AppStore: ObservableObject {
             "isPublished": true
         ])
     }
-
     // Requests are independent of Chat. Read only requests involving this UID.
     @MainActor
     func startBorrowRequestsListener() {
@@ -966,12 +825,10 @@ final class AppStore: ObservableObject {
                 }
             }
     }
-
     func stopBorrowRequestsListener() {
         borrowRequestsListener?.remove()
         borrowRequestsListener = nil
     }
-
     @MainActor
     func submitBorrowRequest(for item: SharedItem, startDate: Date,
                              endDate: Date, note: String) async throws {
@@ -1032,7 +889,6 @@ final class AppStore: ObservableObject {
             }
         }
     }
-
     @MainActor
     func advanceBorrowRequest(_ request: BorrowRequest, to next: BorrowRequest.Status, keepPublished: Bool = true) async throws {
         guard onboardingStage == .active, let uid = Auth.auth().currentUser?.uid else {
@@ -1094,7 +950,6 @@ final class AppStore: ObservableObject {
             }
         }
     }
-
     @MainActor
     func setSharedItemPublished(itemId: String, published: Bool) async throws {
         guard onboardingStage == .active, let uid = Auth.auth().currentUser?.uid else {
@@ -1116,21 +971,17 @@ final class AppStore: ObservableObject {
             }
         }
     }
-
     private func itemError(_ message: String) -> NSError {
         NSError(domain: "CommonsApp.Borrow", code: 400,
                 userInfo: [NSLocalizedDescriptionKey: message])
     }
-
     //Events
     @MainActor
     func startEventsListener() {
         guard eventsListener == nil,
               onboardingStage == .active || onboardingStage == .admin,
               let uid = Auth.auth().currentUser?.uid else { return }
-
         eventsError = nil
-
         eventsListener = Firestore.firestore()
             .collection("events")
             .addSnapshotListener { [weak self] snapshot, error in
@@ -1139,28 +990,22 @@ final class AppStore: ObservableObject {
                           Auth.auth().currentUser?.uid == uid,
                           self.onboardingStage == .active ||
                           self.onboardingStage == .admin else { return }
-
                     if let error {
                         self.eventsError = error.localizedDescription
                         return
                     }
-
                     self.eventsError = nil
-
                     self.events = (snapshot?.documents ?? []).compactMap { doc in
                         let data = doc.data()
-
                         guard let title = data["title"] as? String,
                               let date = (data["date"] as? Timestamp)?.dateValue(),
                               let location = data["location"] as? String,
                               let statusString = data["status"] as? String,
                               let status = BuildingEvent.Status(rawValue: statusString)
                         else { return nil }
-
                         let previousEvent = self.events.first {
                             $0.firestoreId == doc.documentID
                         }
-
                         var event = BuildingEvent(
                             id: previousEvent?.id ?? UUID(),
                             title: title,
@@ -1169,30 +1014,27 @@ final class AppStore: ObservableObject {
                             attendeeCount: previousEvent?.attendeeCount ?? 0,
                             isGoing: previousEvent?.isGoing ?? false
                         )
-
                         event.firestoreId = doc.documentID
                         event.description = data["description"] as? String ?? ""
                         event.endDate = (data["endDate"] as? Timestamp)?.dateValue()
                         event.allowsRSVP = data["allowsRSVP"] as? Bool ?? false
                         event.status = status
                         event.createdBy = data["createdBy"] as? String ?? ""
-
                         return event
                     }
                     .sorted { $0.date < $1.date }
                     self.syncEventAttendeeListeners(for: self.events, uid: uid)
+                    self.saveDataForWidget()
                     await EventReminderManager.shared.synchronize(with: self.events)
                 }
             }
     }
-
     @MainActor
     private func syncEventAttendeeListeners(
         for currentEvents: [BuildingEvent],
         uid: String
     ) {
         let eventIds = Set(currentEvents.compactMap(\.firestoreId))
-
         // Remove listeners for events that no longer exist.
         for (eventId, listener) in eventAttendeeListeners {
             if !eventIds.contains(eventId) {
@@ -1200,13 +1042,11 @@ final class AppStore: ObservableObject {
                 eventAttendeeListeners.removeValue(forKey: eventId)
             }
         }
-
         // Listen to attendee changes for each event.
         for eventId in eventIds {
             guard eventAttendeeListeners[eventId] == nil else {
                 continue
             }
-
             let listener = Firestore.firestore()
                 .collection("events")
                 .document(eventId)
@@ -1220,45 +1060,36 @@ final class AppStore: ObservableObject {
                               self.onboardingStage == .admin else {
                             return
                         }
-
                         if let error {
                             self.eventsError = error.localizedDescription
                             return
                         }
-
                         let attendees = snapshot?.documents ?? []
                         let count = attendees.count
                         let isGoing = attendees.contains {
                             $0.documentID == uid
                         }
-
                         guard let index = self.events.firstIndex(where: {
                             $0.firestoreId == eventId
                         }) else {
                             return
                         }
-
                         self.events[index].attendeeCount = count
                         self.events[index].isGoing = isGoing
                     }
                 }
-
             eventAttendeeListeners[eventId] = listener
         }
     }
-
     @MainActor
     func stopEventsListener() {
         eventsListener?.remove()
         eventsListener = nil
-
         for listener in eventAttendeeListeners.values {
             listener.remove()
         }
-
         eventAttendeeListeners.removeAll()
     }
-
     @MainActor
     func toggleRSVP(for event: BuildingEvent) {
         guard onboardingStage == .active,
@@ -1271,16 +1102,13 @@ final class AppStore: ObservableObject {
             eventsError = "RSVP is not available for this event."
             return
         }
-
         Task { @MainActor in
             do {
                 let db = Firestore.firestore()
                 let eventRef = db.collection("events").document(eventId)
                 let attendeeRef = eventRef.collection("attendees").document(uid)
-
                 // Read the current RSVP from Firestore, not local demo state.
                 let existing = try await attendeeRef.getDocument(source: .server)
-
                 if existing.exists {
                     try await attendeeRef.delete()
                 } else {
@@ -1289,7 +1117,6 @@ final class AppStore: ObservableObject {
                         "createdAt": FieldValue.serverTimestamp()
                     ])
                 }
-
                 eventsError = nil
             } catch {
                 eventsError = error.localizedDescription
@@ -1297,7 +1124,6 @@ final class AppStore: ObservableObject {
             }
         }
     }
-
     // Admin-only event writes. Firestore rules independently verify the admin claim.
     @MainActor
     func saveCommunityEvent(
@@ -1355,7 +1181,6 @@ final class AppStore: ObservableObject {
         ], forDocument: noticeRef)
         try await batch.commit()
     }
-
     @MainActor
     func cancelCommunityEvent(_ event: BuildingEvent) async throws {
         guard onboardingStage == .admin,
@@ -1381,7 +1206,6 @@ final class AppStore: ObservableObject {
         ], forDocument: noticeRef)
         try await batch.commit()
     }
-
     private func eventNoticeText(action: String, title: String, date: Date,
                                  location: String) -> String {
         let when = date.formatted(date: .abbreviated, time: .shortened)
@@ -1394,14 +1218,11 @@ final class AppStore: ObservableObject {
             return "❌ Event cancelled: \(title)\nOriginally scheduled: \(when)\nLocation: \(location)\nThis event will not take place."
         }
     }
-
     private func eventError(_ message: String) -> NSError {
         NSError(domain: "CommonsApp.Events", code: 400,
                 userInfo: [NSLocalizedDescriptionKey: message])
     }
-
     //Service Hub Actions
-
     // MARK: - Firebase maintenance requests
     // Residents query their own documents; admins query all documents.
     func startMaintenanceListener() {
@@ -1439,12 +1260,10 @@ final class AppStore: ObservableObject {
             }
         }
     }
-
     func stopMaintenanceListener() {
         maintenanceListener?.remove()
         maintenanceListener = nil
     }
-
     // Photos are analyzed on-device by Core ML and are never uploaded.
     // Only resident-reviewed title and description are stored in Firestore.
     @MainActor
@@ -1474,7 +1293,6 @@ final class AppStore: ObservableObject {
         try await Firestore.firestore().collection("maintenanceRequests")
             .document(requestId).setData(fields)
     }
-
     @MainActor
     func advanceStage(of request: MaintenanceRequest) async throws {
         guard onboardingStage == .admin, Auth.auth().currentUser != nil else {
@@ -1487,7 +1305,6 @@ final class AppStore: ObservableObject {
             .updateData(["stage": request.stage.rawValue + 1,
                          "updatedAt": FieldValue.serverTimestamp()])
     }
-
     // MARK: - Gym reservations. One document per administrator-created slot.
     // Membership is an array in that document; concurrent changes use transactions.
     @MainActor
@@ -1528,14 +1345,12 @@ final class AppStore: ObservableObject {
                 }
             }
     }
-
     func stopGymListeners() {
         gymSlotsListener?.remove(); gymSlotsListener = nil
         gymSettingsListener?.remove(); gymSettingsListener = nil
         gymOccupancy.removeAll(); gymMembersBySlot.removeAll()
         gymMySlotIDs.removeAll(); bookingSlots.removeAll()
     }
-
     @MainActor
     func setGymCapacity(_ capacity: Int) async throws {
         guard onboardingStage == .admin, (1...100).contains(capacity) else {
@@ -1544,7 +1359,6 @@ final class AppStore: ObservableObject {
         try await Firestore.firestore().collection("gymSettings")
             .document("main").setData(["capacity": capacity], merge: true)
     }
-
     // Admin creates the next 14 days of hourly slots, 9 AM–8 PM.
     // Existing slots are never overwritten (preserves reservations).
     @MainActor
@@ -1580,7 +1394,6 @@ final class AppStore: ObservableObject {
         }
         if newCount > 0 { try await batch.commit() }
     }
-
     // Locale-independent document key shared by all devices.
     private func gymSlotKey(_ date: Date) -> String {
         let f = DateFormatter(); f.locale = Locale(identifier: "en_US_POSIX")
@@ -1588,7 +1401,6 @@ final class AppStore: ObservableObject {
         f.dateFormat = "yyyyMMddHH"
         return f.string(from: date)
     }
-
     @MainActor
     func reserveGymSlot(_ slot: BookingSlot, cancel: Bool = false) async throws {
         guard onboardingStage == .active, let uid = Auth.auth().currentUser?.uid,
@@ -1626,22 +1438,17 @@ final class AppStore: ObservableObject {
             }
         }
     }
-
     func getSlots(for amenity: Amenity) -> [BookingSlot] {
         guard amenity.name == "Gym" else { return [] }
         return bookingSlots.filter { $0.amenityID == amenity.id && $0.start > Date() }
     }
-
     private func gymFailure(_ message: String) -> NSError {
         NSError(domain: "CommonsApp.Gym", code: 400,
                 userInfo: [NSLocalizedDescriptionKey: message])
     }
-
     //Chat
-
     func send(text: String, in thread: ChatThread) {
         let messageText = text.trimmingCharacters(in: .whitespacesAndNewlines)
-
         guard !messageText.isEmpty,
               messageText.count <= 2000,
               let chatId = thread.firestoreId,
@@ -1649,7 +1456,6 @@ final class AppStore: ObservableObject {
         else {
             return
         }
-
         Firestore.firestore()
             .collection("chats")
             .document(chatId)
@@ -1664,12 +1470,9 @@ final class AppStore: ObservableObject {
                 }
             }
     }
-
     //Sample Data Setup
-
     private func seedSampleData() {
         let now = Date()
-
         //Create sample posts
         posts = [
             Post(
@@ -1701,28 +1504,21 @@ final class AppStore: ObservableObject {
                 replyCount: 3
             )
         ]
-
         // Firestore provides shared items for approved residents.
         items = []
-
         // Events are loaded from Firestore.
         events = []
-
         //Create sample maintenance request
         maintenanceRequests = []
-
         //Create sample amenities
         amenities = [Amenity(name: "Gym", subtitle: "Reserve your workout time")]
         bookingSlots = []
-
         //Create sample pending residents
         pendingResidents = [
             PendingResident(id: "demo-priya", name: "Priya Nair", unit: "4B", requestedAt: now),
             PendingResident(id: "demo-tom", name: "Tom Alcott", unit: "11D", requestedAt: now)
         ]
-
         pinnedAnnouncementText = ""
-
         //Create offline cache items
         offlineCache = [
             OfflineCacheItem(label: "Door entry codes", isCached: true, lastSynced: now),
@@ -1731,67 +1527,51 @@ final class AppStore: ObservableObject {
             OfflineCacheItem(label: "Photos & attachments", isCached: false, lastSynced: nil)
         ]
     }
-
     func setAppLockDelay(_ seconds: Int) {
         let allowedValues = [0, 60, 300, 900]
-
         guard allowedValues.contains(seconds) else {
             return
         }
-
         appLockDelay = seconds
-
         UserDefaults.standard.set(
             seconds,
             forKey: appLockDelayPreferenceKey
         )
     }
-
     func appDidLeaveForeground() {
         guard appLockEnabled else {
             return
         }
-
         if appLeftForegroundAt == nil {
             appLeftForegroundAt = Date()
         }
-
         if appLockDelay == 0 {
             lockApp()
         }
     }
-
     func appDidBecomeActive() {
         guard appLockEnabled else {
             appLeftForegroundAt = nil
             return
         }
-
         guard let leftAt = appLeftForegroundAt else {
             return
         }
-
         let elapsedSeconds = Date().timeIntervalSince(leftAt)
-
         if elapsedSeconds >= Double(appLockDelay) {
             lockApp()
         }
-
         appLeftForegroundAt = nil
     }
-
     //App Lock (Face ID / Touch ID)
-
     func lockApp() {
         if appLockEnabled {
             isLocked = true
         }
     }
-
     func enableAppLock(completion: @escaping (Bool) -> Void) {
         let context = LAContext()
         var error: NSError?
-
         guard context.canEvaluatePolicy(
             .deviceOwnerAuthenticationWithBiometrics,
             error: &error
@@ -1801,7 +1581,6 @@ final class AppStore: ObservableObject {
             }
             return
         }
-
         context.evaluatePolicy(
             .deviceOwnerAuthenticationWithBiometrics,
             localizedReason: "Enable biometric protection for Commons"
@@ -1812,16 +1591,13 @@ final class AppStore: ObservableObject {
                     self.isLocked = false
                     UserDefaults.standard.set(true, forKey: self.appLockPreferenceKey)
                 }
-
                 completion(success)
             }
         }
     }
-
     func disableAppLock(completion: @escaping (Bool) -> Void) {
         let context = LAContext()
         var error: NSError?
-
         guard context.canEvaluatePolicy(
             .deviceOwnerAuthentication,
             error: &error
@@ -1831,7 +1607,6 @@ final class AppStore: ObservableObject {
             }
             return
         }
-
         context.evaluatePolicy(
             .deviceOwnerAuthentication,
             localizedReason: "Disable Commons app lock"
@@ -1842,31 +1617,64 @@ final class AppStore: ObservableObject {
                     self.isLocked = false
                     UserDefaults.standard.set(false, forKey: self.appLockPreferenceKey)
                 }
-
                 completion(success)
             }
         }
     }
-
     func saveDataForWidget() {
-        // We use UserDefaults with our App Group to share data
-        // with the widget extension
-        let defaults = UserDefaults(suiteName: "group.com.yourname.commonsapp")
-
-        // Save the pinned announcement text
-        defaults?.set(pinnedAnnouncementText, forKey: "pinnedAnnouncement")
-
-        // Save the next event title if there is one
-        if let nextEvent = events.first {
-            defaults?.set(nextEvent.title, forKey: "nextEventTitle")
-            defaults?.set(nextEvent.location, forKey: "nextEventLocation")
+        let sharedContainer = FileManager.default.containerURL(
+            forSecurityApplicationGroupIdentifier: "group.com.sohan.CommonsApp"
+        )
+        print(
+            "WIDGET DEBUG: App Group container =",
+            sharedContainer?.path ?? "UNAVAILABLE"
+        )
+        let defaults = UserDefaults(
+            suiteName: "group.com.sohan.CommonsApp"
+        )
+        guard let defaults else {
+            print("Widget shared storage is unavailable.")
+            return
         }
+        print("WIDGET DEBUG: Shared storage available")
+        print("WIDGET DEBUG: Announcement =", pinnedAnnouncementText)
+        print("WIDGET DEBUG: Events count =", events.count)
+        // Save the latest announcement.
+        defaults.set(
+            pinnedAnnouncementText,
+            forKey: "pinnedAnnouncement"
+        )
+        print(
+            "WIDGET DEBUG: Read-back announcement =",
+            defaults.string(forKey: "pinnedAnnouncement") ?? "nil"
+        )
+        // Find the next active upcoming event.
+        let now = Date()
+        let upcomingEvents = events
+            .filter { !$0.isCancelled && $0.date >= now }
+            .sorted { $0.date < $1.date }
+        if let nextEvent = upcomingEvents.first {
+            defaults.set(
+                nextEvent.title,
+                forKey: "nextEventTitle"
+            )
+            defaults.set(
+                nextEvent.location,
+                forKey: "nextEventLocation"
+            )
+        } else {
+            // Clear previously saved event information.
+            defaults.removeObject(forKey: "nextEventTitle")
+            defaults.removeObject(forKey: "nextEventLocation")
+        }
+        // Request a widget timeline refresh.
+        WidgetCenter.shared.reloadTimelines(
+            ofKind: "CommonsAppWidget"
+        )
     }
-
     func unlockWithBiometrics(completion: @escaping (Bool) -> Void) {
         let context = LAContext()
         var error: NSError?
-
         guard context.canEvaluatePolicy(
             .deviceOwnerAuthentication,
             error: &error
@@ -1876,7 +1684,6 @@ final class AppStore: ObservableObject {
             }
             return
         }
-
         context.evaluatePolicy(
             .deviceOwnerAuthentication,
             localizedReason: "Unlock Commons"
@@ -1885,16 +1692,13 @@ final class AppStore: ObservableObject {
                 if success {
                     self.isLocked = false
                 }
-
                 completion(success)
             }
         }
     }
-
     func pinAnnouncement(_ text: String) {
         // Update pinned text
         pinnedAnnouncementText = text
-
         // Add as pinned post on the wall
         let newPost = Post(
             authorName: "Management",
@@ -1904,7 +1708,6 @@ final class AppStore: ObservableObject {
             text: text,
             isPinned: true
         )
-
         // Remove old pinned posts
         var updatedPosts: [Post] = []
         for post in posts {
@@ -1914,11 +1717,9 @@ final class AppStore: ObservableObject {
         }
         updatedPosts.insert(newPost, at: 0)
         posts = updatedPosts
-
         // Save for widget
         saveDataForWidget()
     }
-
     func saveAnnouncementToFirestore(_ text: String) async throws {
         guard let user = Auth.auth().currentUser else {
             throw NSError(
@@ -1929,9 +1730,7 @@ final class AppStore: ObservableObject {
                 ]
             )
         }
-
         let token = try await user.getIDTokenResult()
-
         guard token.claims["admin"] as? Bool == true else {
             throw NSError(
                 domain: "CommonsApp",
@@ -1941,9 +1740,7 @@ final class AppStore: ObservableObject {
                 ]
             )
         }
-
         let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
-
         guard !trimmedText.isEmpty else {
             throw NSError(
                 domain: "CommonsApp",
@@ -1953,7 +1750,6 @@ final class AppStore: ObservableObject {
                 ]
             )
         }
-
         try await Firestore.firestore()
             .collection("announcements")
             .addDocument(data: [
@@ -1963,26 +1759,21 @@ final class AppStore: ObservableObject {
                 "isPinned": true
             ])
     }
-
     func loadLatestAnnouncement() async throws {
         guard Auth.auth().currentUser != nil else {
             return
         }
-
         let snapshot = try await Firestore.firestore()
             .collection("announcements")
             .order(by: "createdAt", descending: true)
             .limit(to: 50)
             .getDocuments()
-
         guard let document = snapshot.documents.first(where: { $0.data()["isPinned"] as? Bool != false }),
               let text = document.data()["text"] as? String,
               !text.isEmpty else {
             return
         }
-
         pinnedAnnouncementText = text
-
         // Update the existing Building Wall post collection.
         let announcementPost = Post(
             authorName: "Management",
@@ -1993,41 +1784,32 @@ final class AppStore: ObservableObject {
             text: text,
             isPinned: true
         )
-
         posts.removeAll { $0.isPinned }
         posts.insert(announcementPost, at: 0)
-
         // Preserve widget updates.
         saveDataForWidget()
     }
-
     @MainActor
     func setActiveChat(_ chatId: String?) {
         activeChatId = chatId
-
         if chatId != nil {
             incomingChatNotification = nil
         }
     }
-
     //newest Firestore announcement and updates the Building Wall automatically
     func startAnnouncementListener() {
         // Prevent duplicate listeners.
         guard announcementListener == nil else { return }
-
         guard Auth.auth().currentUser != nil else { return }
-
         announcementListener = Firestore.firestore()
             .collection("announcements")
             .order(by: "createdAt", descending: true)
             .limit(to: 50)
             .addSnapshotListener { [weak self] snapshot, error in
-
                 if let error = error {
                     print("Announcement listener error: \(error.localizedDescription)")
                     return
                 }
-
                 guard let documents = snapshot?.documents else { return }
                 let pinned = documents.first { $0.data()["isPinned"] as? Bool != false }
                 let notices: [Post] = documents.compactMap { document in
@@ -2063,17 +1845,55 @@ final class AppStore: ObservableObject {
                 }
             }
     }
-
     struct ChatNotification: Identifiable {
         let id: String
         let chatId: String
         let senderName: String
         let message: String
     }
-
     func stopAnnouncementListener() {
         announcementListener?.remove()
         announcementListener = nil
     }
+    // Edit approved resident details without changing approval or unit assignment.
+    @MainActor
+    func updateResidentPersonalDetails(name: String, phone: String, showUnit: Bool) async throws {
+        guard onboardingStage == .active, let user = Auth.auth().currentUser else {
+            throw NSError(domain: "CommonsApp.Profile", code: 401,
+                          userInfo: [NSLocalizedDescriptionKey: "Please sign in as an approved resident."])
+        }
+        let updatedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let updatedPhone = phone.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !updatedName.isEmpty, updatedName.count <= 100 else {
+            throw NSError(domain: "CommonsApp.Profile", code: 400,
+                          userInfo: [NSLocalizedDescriptionKey: "Enter a name between 1 and 100 characters."])
+        }
+        guard updatedPhone.count <= 30 else {
+            throw NSError(domain: "CommonsApp.Profile", code: 400,
+                          userInfo: [NSLocalizedDescriptionKey: "Phone number must be 30 characters or fewer."])
+        }
+        let reference = Firestore.firestore().collection("users").document(user.uid)
+        let snapshot = try await reference.getDocument(source: .server)
+        guard let data = snapshot.data(), data["approvalStatus"] as? String == "approved" else {
+            throw NSError(domain: "CommonsApp.Profile", code: 403,
+                          userInfo: [NSLocalizedDescriptionKey: "An approved resident account is required."])
+        }
+        let directoryReference = Firestore.firestore().collection("residentDirectory").document(user.uid)
+        let directorySnapshot = try await directoryReference.getDocument(source: .server)
+        guard directorySnapshot.exists else {
+            throw NSError(domain: "CommonsApp.Profile", code: 404,
+                          userInfo: [NSLocalizedDescriptionKey: "Your resident directory entry is missing. Contact building administration."])
+        }
+        let batch = Firestore.firestore().batch()
+        batch.updateData([
+            "name": updatedName,
+            "phone": updatedPhone,
+            "showUnitToNeighbors": showUnit
+        ], forDocument: reference)
+        batch.updateData(["name": updatedName], forDocument: directoryReference)
+        try await batch.commit()
+        currentResident.name = updatedName
+        currentResident.phone = updatedPhone
+        currentResident.showUnitToNeighbors = showUnit
+    }
 }
-

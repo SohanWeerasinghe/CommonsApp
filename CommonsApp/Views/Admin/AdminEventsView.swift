@@ -84,9 +84,23 @@ struct AdminEventsView: View {
                                     .foregroundStyle(AdminPalette.muted)
                                     Spacer(minLength: 0)
                                     VStack(alignment: .trailing, spacing: 10) {
-                                        Text(event.isCancelled ? "CANCELLED" : "ACTIVE")
+                                        
+                                        TimelineView(.periodic(from: .now, by: 30)) { context in
+                                            let isCompleted = !event.isCancelled && event.date <= context.date
+
+                                            Text(
+                                                event.isCancelled
+                                                    ? "CANCELLED"
+                                                    : isCompleted ? "COMPLETED" : "ACTIVE"
+                                            )
                                             .font(.system(size: 9, weight: .bold))
-                                            .foregroundStyle(event.isCancelled ? Color.red : Color.green)
+                                            .foregroundStyle(
+                                                event.isCancelled
+                                                    ? Color.red
+                                                    : isCompleted ? Color.gray : Color.green
+                                            )
+                                        }
+
                                         if !event.isCancelled && event.firestoreId != nil {
                                             Button { editingEvent = event } label: {
                                                 Image(systemName: "pencil")
