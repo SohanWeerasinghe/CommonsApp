@@ -225,6 +225,30 @@ struct LendBorrowView: View {
                         .font(.system(size: 13))
                         .foregroundStyle(MarketStyle.muted)
                         .multilineTextAlignment(.center)
+                    Button {
+                        if !searchText.isEmpty || selectedFilter != "All" {
+                            searchText = ""
+                            selectedFilter = "All"
+                        } else {
+                            showNewItem = true
+                        }
+                    } label: {
+                        Label(
+                            !searchText.isEmpty || selectedFilter != "All"
+                                ? "Show All Items"
+                                : "Share an Item",
+                            systemImage: !searchText.isEmpty || selectedFilter != "All"
+                                ? "arrow.counterclockwise"
+                                : "plus.circle.fill"
+                        )
+                        .font(.system(size: 13, weight: .semibold, design: .rounded))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 20)
+                        .frame(height: 44)
+                        .background(MarketStyle.purple, in: Capsule())
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.top, 8)
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 38)
