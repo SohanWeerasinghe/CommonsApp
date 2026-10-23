@@ -163,6 +163,11 @@
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
+		7217F2D8308AF66000F1E520 /* Notifications */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = Notifications;
+			sourceTree = "<group>";
+		};
 		72767C793067C9C80078788B /* CommonsWidget */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
@@ -349,6 +354,7 @@
 		72514388306BA71800F85646 /* CommonsApp */ = {
 			isa = PBXGroup;
 			children = (
+				7217F2D8308AF66000F1E520 /* Notifications */,
 				7217F2CC308AED9100F1E520 /* MaintenanceLiveActivity.swift */,
 				7217F2CA308AED7900F1E520 /* MaintenanceActivityManager.swift */,
 				7217F2C7308AED5D00F1E520 /* MaintenanceActivityAttributes.swift */,
@@ -419,6 +425,9 @@
 			);
 			dependencies = (
 				72767C843067C9CA0078788B /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				7217F2D8308AF66000F1E520 /* Notifications */,
 			);
 			name = CommonsApp;
 			packageProductDependencies = (

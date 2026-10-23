@@ -216,6 +216,15 @@ struct SettingsView: View {
                 .buttonStyle(.plain)
                 .disabled(isRequestingNotifications)
             }
+            Button("Test System Notification") {
+                Task {
+                    await AppNotificationManager.shared.send(
+                        id: UUID().uuidString,
+                        title: "CommonsApp Test",
+                        body: "This is a local system notification."
+                    )
+                }
+            }
         }
     }
     
@@ -299,10 +308,20 @@ struct SettingsView: View {
         }
     }
     private func requestNotificationPermission() {
+        print("PERMISSION DEBUG: Button triggered")
+
         isRequestingNotifications = true
+
         UNUserNotificationCenter.current().requestAuthorization(
             options: [.alert, .badge, .sound]
-        ) { _, _ in
+        ) { granted, error in
+
+            print("PERMISSION DEBUG: Granted = \(granted)")
+
+            if let error = error {
+                print("PERMISSION DEBUG: Error = \(error.localizedDescription)")
+            }
+
             DispatchQueue.main.async {
                 isRequestingNotifications = false
                 checkNotificationPermission()
