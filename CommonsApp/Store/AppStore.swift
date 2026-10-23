@@ -1467,11 +1467,18 @@ final class AppStore: ObservableObject {
             throw NSError(domain: "CommonsApp.Maintenance", code: 403,
                           userInfo: [NSLocalizedDescriptionKey: "Administrator access required."])
         }
-        guard request.stage != .complete else { return }
+        guard let nextStage = MaintenanceValidation.nextStage(
+            after: request.stage
+        ) else {
+            return
+        }
+
         try await Firestore.firestore().collection("maintenanceRequests")
             .document(request.id.uuidString.lowercased())
-            .updateData(["stage": request.stage.rawValue + 1,
-                         "updatedAt": FieldValue.serverTimestamp()])
+            .updateData([
+                "stage": nextStage.rawValue,
+                "updatedAt": FieldValue.serverTimestamp()
+            ])
     }
     // MARK: - Gym reservations
     // MARK: - Gym reservations. One document per administrator-created slot.

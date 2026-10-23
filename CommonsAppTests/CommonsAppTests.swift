@@ -201,6 +201,32 @@ struct CommonsAppTests {
         ))
     }
 
+    // MARK: - Maintenance Stage Transitions
+
+    @Test func submittedRequestAdvancesToAssigned() {
+        let next = MaintenanceValidation.nextStage(after: .submitted)
+
+        #expect(next == .assigned)
+    }
+
+    @Test func assignedRequestAdvancesToOnTheWay() {
+        let next = MaintenanceValidation.nextStage(after: .assigned)
+
+        #expect(next == .onTheWay)
+    }
+
+    @Test func onTheWayRequestAdvancesToComplete() {
+        let next = MaintenanceValidation.nextStage(after: .onTheWay)
+
+        #expect(next == .complete)
+    }
+
+    @Test func completedRequestCannotAdvance() {
+        let next = MaintenanceValidation.nextStage(after: .complete)
+
+        #expect(next == nil)
+    }
+
     @Test func maintenanceDetailsAtMaximumLength() {
         #expect(MaintenanceValidation.validate(
             title: "Water leak",

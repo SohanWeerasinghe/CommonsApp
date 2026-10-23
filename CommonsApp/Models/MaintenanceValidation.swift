@@ -31,4 +31,23 @@ struct MaintenanceValidation {
 
         return true
     }
+
+    static func nextStage(
+        after currentStage: MaintenanceRequest.Stage
+    ) -> MaintenanceRequest.Stage? {
+
+        switch currentStage {
+        case .submitted:
+            return .assigned
+
+        case .assigned:
+            return .onTheWay
+
+        case .onTheWay:
+            return .complete
+
+        case .complete:
+            return nil
+        }
+    }
 }
