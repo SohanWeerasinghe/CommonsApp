@@ -1230,9 +1230,13 @@ final class AppStore: ObservableObject {
         let name = title.trimmingCharacters(in: .whitespacesAndNewlines)
         let details = description.trimmingCharacters(in: .whitespacesAndNewlines)
         let place = location.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !name.isEmpty, name.count <= 100,
-              details.count <= 2000, !place.isEmpty, place.count <= 200,
-              start > Date(), end > start else {
+        guard EventValidation.validate(
+            title: title,
+            description: description,
+            location: location,
+            start: start,
+            end: end
+        ) else {
             throw eventError("Enter a title, location, future start time and a later end time.")
         }
         let db = Firestore.firestore()
