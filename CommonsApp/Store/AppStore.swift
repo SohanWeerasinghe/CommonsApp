@@ -1350,6 +1350,14 @@ final class AppStore: ObservableObject {
                     return
                 }
                 self.maintenanceError = nil
+
+                let previousRequests = self.maintenanceRequests
+                let previousStages = Dictionary(
+                    uniqueKeysWithValues: previousRequests.map {
+                        ($0.id, $0.stage)
+                    }
+                )
+
                 self.maintenanceRequests = (snapshot?.documents ?? []).compactMap { document in
                     let data = document.data()
                     guard let title = data["title"] as? String,
@@ -1365,6 +1373,33 @@ final class AppStore: ObservableObject {
                                               stage: stage, residentId: residentId,
                                               photoPath: data["photoPath"] as? String)
                 }.sorted { $0.submittedAt > $1.submittedAt }
+
+                // Notify residents when an existing maintenance request changes stage.
+                if self.onboardingStage == .active {
+                    for request in self.maintenanceRequests {
+                        guard let oldStage = previousStages[request.id],
+                              oldStage != request.stage else {
+                            continue
+                        }
+
+                        let notificationTitle: String
+                        let notificationBody: String
+
+                        if request.stage == .complete {
+                            notificationTitle = "Maintenance Request Completed"
+                            notificationBody = "Your maintenance request '\(request.title)' has been completed."
+                        } else {
+                            notificationTitle = "Maintenance Status Updated"
+                            notificationBody = "The status of your maintenance request '\(request.title)' has changed."
+                        }
+
+                        await AppNotificationManager.shared.send(
+                            id: "maintenance-\(request.id.uuidString)-\(request.stage.rawValue)",
+                            title: notificationTitle,
+                            body: notificationBody
+                        )
+                    }
+                }
 
                 // Synchronize existing Live Activities with Firestore stages.
                 if self.onboardingStage == .active {
