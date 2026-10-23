@@ -1467,11 +1467,18 @@ final class AppStore: ObservableObject {
             throw NSError(domain: "CommonsApp.Maintenance", code: 403,
                           userInfo: [NSLocalizedDescriptionKey: "Administrator access required."])
         }
-        guard request.stage != .complete else { return }
+        guard let nextStage = MaintenanceValidation.nextStage(
+            after: request.stage
+        ) else {
+            return
+        }
+
         try await Firestore.firestore().collection("maintenanceRequests")
             .document(request.id.uuidString.lowercased())
-            .updateData(["stage": request.stage.rawValue + 1,
-                         "updatedAt": FieldValue.serverTimestamp()])
+            .updateData([
+                "stage": nextStage.rawValue,
+                "updatedAt": FieldValue.serverTimestamp()
+            ])
     }
     // MARK: - Gym reservations
     // MARK: - Gym reservations. One document per administrator-created slot.
@@ -1595,13 +1602,21 @@ final class AppStore: ObservableObject {
                       let start = (data["start"] as? Timestamp)?.dateValue(),
                       start > Date() else { throw self.gymFailure("This slot is no longer available.") }
                 let capacity = setting.data()?["capacity"] as? Int ?? 0
+
+                if let errorMessage = GymBookingValidation.validate(
+                    members: members,
+                    userID: uid,
+                    capacity: capacity,
+                    cancel: cancel
+                ) {
+                    throw self.gymFailure(errorMessage)
+                }
+
                 var next = members
+
                 if cancel {
-                    guard members.contains(uid) else { throw self.gymFailure("No reservation to cancel.") }
                     next.removeAll { $0 == uid }
                 } else {
-                    guard !members.contains(uid) else { throw self.gymFailure("You already booked this slot.") }
-                    guard members.count < capacity else { throw self.gymFailure("This Gym slot is full.") }
                     next.append(uid)
                 }
                 transaction.updateData([

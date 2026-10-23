@@ -201,6 +201,32 @@ struct CommonsAppTests {
         ))
     }
 
+    // MARK: - Maintenance Stage Transitions
+
+    @Test func submittedRequestAdvancesToAssigned() {
+        let next = MaintenanceValidation.nextStage(after: .submitted)
+
+        #expect(next == .assigned)
+    }
+
+    @Test func assignedRequestAdvancesToOnTheWay() {
+        let next = MaintenanceValidation.nextStage(after: .assigned)
+
+        #expect(next == .onTheWay)
+    }
+
+    @Test func onTheWayRequestAdvancesToComplete() {
+        let next = MaintenanceValidation.nextStage(after: .onTheWay)
+
+        #expect(next == .complete)
+    }
+
+    @Test func completedRequestCannotAdvance() {
+        let next = MaintenanceValidation.nextStage(after: .complete)
+
+        #expect(next == nil)
+    }
+
     @Test func maintenanceDetailsAtMaximumLength() {
         #expect(MaintenanceValidation.validate(
             title: "Water leak",
@@ -214,4 +240,85 @@ struct CommonsAppTests {
             details: String(repeating: "A", count: 2001)
         ))
     }
+
+
+    // MARK: - Gym Booking Validation
+
+    @Test func validGymBooking() {
+        let result = GymBookingValidation.validate(
+            members: ["resident1"],
+            userID: "resident2",
+            capacity: 5,
+            cancel: false
+        )
+
+        #expect(result == nil)
+    }
+
+    @Test func duplicateGymBookingRejected() {
+        let result = GymBookingValidation.validate(
+            members: ["resident1"],
+            userID: "resident1",
+            capacity: 5,
+            cancel: false
+        )
+
+        #expect(result == "You already booked this slot.")
+    }
+
+    @Test func fullGymSlotRejected() {
+        let result = GymBookingValidation.validate(
+            members: ["resident1", "resident2"],
+            userID: "resident3",
+            capacity: 2,
+            cancel: false
+        )
+
+        #expect(result == "This Gym slot is full.")
+    }
+
+    @Test func gymBookingBelowCapacityAllowed() {
+        let result = GymBookingValidation.validate(
+            members: ["resident1", "resident2"],
+            userID: "resident3",
+            capacity: 3,
+            cancel: false
+        )
+
+        #expect(result == nil)
+    }
+
+    @Test func validGymCancellation() {
+        let result = GymBookingValidation.validate(
+            members: ["resident1", "resident2"],
+            userID: "resident1",
+            capacity: 2,
+            cancel: true
+        )
+
+        #expect(result == nil)
+    }
+
+    @Test func gymCancellationWithoutReservationRejected() {
+        let result = GymBookingValidation.validate(
+            members: ["resident1"],
+            userID: "resident2",
+            capacity: 5,
+            cancel: true
+        )
+
+        #expect(result == "No reservation to cancel.")
+    }
+
+    @Test func gymBookingWithZeroCapacityRejected() {
+        let result = GymBookingValidation.validate(
+            members: [],
+            userID: "resident1",
+            capacity: 0,
+            cancel: false
+        )
+
+        #expect(result == "This Gym slot is full.")
+    }
+
 }
