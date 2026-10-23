@@ -24,6 +24,7 @@
 		7217F2C9308AED5D00F1E520 /* MaintenanceActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7217F2C7308AED5D00F1E520 /* MaintenanceActivityAttributes.swift */; };
 		7217F2CB308AED7900F1E520 /* MaintenanceActivityManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7217F2CA308AED7900F1E520 /* MaintenanceActivityManager.swift */; };
 		7217F2CD308AED9100F1E520 /* MaintenanceLiveActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7217F2CC308AED9100F1E520 /* MaintenanceLiveActivity.swift */; };
+		7217F2EE308B1F3D00F1E520 /* MaintenanceValidation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7217F2ED308B1F3B00F1E520 /* MaintenanceValidation.swift */; };
 		72387211306BB0570061D2FD /* CommonsAppApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7238720E306BB0570061D2FD /* CommonsAppApp.swift */; };
 		72387212306BB0570061D2FD /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 72387210306BB0570061D2FD /* RootView.swift */; };
 		72387213306BB0570061D2FD /* MainTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7238720F306BB0570061D2FD /* MainTabView.swift */; };
@@ -71,6 +72,13 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
+		7217F2E8308B1BEC00F1E520 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 72767BF03060EC830078788B /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 72767BF73060EC830078788B;
+			remoteInfo = CommonsApp;
+		};
 		72767C833067C9CA0078788B /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = 72767BF03060EC830078788B /* Project object */;
@@ -106,6 +114,8 @@
 		7217F2C7308AED5D00F1E520 /* MaintenanceActivityAttributes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MaintenanceActivityAttributes.swift; sourceTree = "<group>"; };
 		7217F2CA308AED7900F1E520 /* MaintenanceActivityManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MaintenanceActivityManager.swift; sourceTree = "<group>"; };
 		7217F2CC308AED9100F1E520 /* MaintenanceLiveActivity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MaintenanceLiveActivity.swift; sourceTree = "<group>"; };
+		7217F2E4308B1BEC00F1E520 /* CommonsAppTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CommonsAppTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		7217F2ED308B1F3B00F1E520 /* MaintenanceValidation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MaintenanceValidation.swift; sourceTree = "<group>"; };
 		7238720E306BB0570061D2FD /* CommonsAppApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommonsAppApp.swift; sourceTree = "<group>"; };
 		7238720F306BB0570061D2FD /* MainTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainTabView.swift; sourceTree = "<group>"; };
 		72387210306BB0570061D2FD /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
@@ -173,6 +183,11 @@
 			path = Utilities;
 			sourceTree = "<group>";
 		};
+		7217F2E5308B1BEC00F1E520 /* CommonsAppTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = CommonsAppTests;
+			sourceTree = "<group>";
+		};
 		72767C793067C9C80078788B /* CommonsWidget */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
@@ -184,6 +199,11 @@
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		7217F2E1308B1BEC00F1E520 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			files = (
+			);
+		};
 		72767BF53060EC830078788B /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			files = (
@@ -216,6 +236,7 @@
 		72387217306BB0F70061D2FD /* Models */ = {
 			isa = PBXGroup;
 			children = (
+				7217F2ED308B1F3B00F1E520 /* MaintenanceValidation.swift */,
 				72387216306BB0F70061D2FD /* Models.swift */,
 			);
 			path = Models;
@@ -391,6 +412,7 @@
 				72514388306BA71800F85646 /* CommonsApp */,
 				72767C8C3067CA5C0078788B /* CommonsWidgetExtension.entitlements */,
 				72767C793067C9C80078788B /* CommonsWidget */,
+				7217F2E5308B1BEC00F1E520 /* CommonsAppTests */,
 				72767C743067C9C80078788B /* Frameworks */,
 				7251438B306BA72600F85646 /* CommonsApp.txt */,
 				72767BF93060EC830078788B /* Products */,
@@ -402,6 +424,7 @@
 			children = (
 				72767BF83060EC830078788B /* CommonsApp.app */,
 				72767C733067C9C80078788B /* CommonsWidgetExtension.appex */,
+				7217F2E4308B1BEC00F1E520 /* CommonsAppTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -418,6 +441,27 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		7217F2E3308B1BEC00F1E520 /* CommonsAppTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 7217F2EA308B1BEC00F1E520 /* Build configuration list for PBXNativeTarget "CommonsAppTests" */;
+			buildPhases = (
+				7217F2E0308B1BEC00F1E520 /* Sources */,
+				7217F2E1308B1BEC00F1E520 /* Frameworks */,
+				7217F2E2308B1BEC00F1E520 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				7217F2E9308B1BEC00F1E520 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				7217F2E5308B1BEC00F1E520 /* CommonsAppTests */,
+			);
+			name = CommonsAppTests;
+			productName = CommonsAppTests;
+			productReference = 7217F2E4308B1BEC00F1E520 /* CommonsAppTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 		72767BF73060EC830078788B /* CommonsApp */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 72767C053060EC860078788B /* Build configuration list for PBXNativeTarget "CommonsApp" */;
@@ -477,6 +521,10 @@
 				LastSwiftUpdateCheck = 2700;
 				LastUpgradeCheck = 2700;
 				TargetAttributes = {
+					7217F2E3308B1BEC00F1E520 = {
+						CreatedOnToolsVersion = 27.0;
+						TestTargetID = 72767BF73060EC830078788B;
+					};
 					72767BF73060EC830078788B = {
 						CreatedOnToolsVersion = 27.0;
 						LastSwiftMigration = 2700;
@@ -506,11 +554,17 @@
 			targets = (
 				72767BF73060EC830078788B /* CommonsApp */,
 				72767C723067C9C80078788B /* CommonsWidgetExtension */,
+				7217F2E3308B1BEC00F1E520 /* CommonsAppTests */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
+		7217F2E2308B1BEC00F1E520 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			files = (
+			);
+		};
 		72767BF63060EC830078788B /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			files = (
@@ -527,6 +581,11 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		7217F2E0308B1BEC00F1E520 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			files = (
+			);
+		};
 		72767BF43060EC830078788B /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			files = (
@@ -553,6 +612,7 @@
 				7217F2BC308A457C00F1E520 /* ProfilePhotoStore.swift in Sources */,
 				7217F2B8308A1BCD00F1E520 /* SiriNavigation.swift in Sources */,
 				72387249306BB0F70061D2FD /* ServiceHubView.swift in Sources */,
+				7217F2EE308B1F3D00F1E520 /* MaintenanceValidation.swift in Sources */,
 				7217F2BE308A4C2200F1E520 /* ChatProfilePhotoLoader.swift in Sources */,
 				7238724A306BB0F70061D2FD /* BookingConfirmedView.swift in Sources */,
 				7238724B306BB0F70061D2FD /* NewMaintenanceRequestView.swift in Sources */,
@@ -589,6 +649,11 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
+		7217F2E9308B1BEC00F1E520 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 72767BF73060EC830078788B /* CommonsApp */;
+			targetProxy = 7217F2E8308B1BEC00F1E520 /* PBXContainerItemProxy */;
+		};
 		72767C843067C9CA0078788B /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			target = 72767C723067C9C80078788B /* CommonsWidgetExtension */;
@@ -597,6 +662,48 @@
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
+		7217F2EB308B1BEC00F1E520 /* Debug configuration for PBXNativeTarget "CommonsAppTests" */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = T95R5RRBC6;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.sohan.CommonsAppTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/CommonsApp.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/CommonsApp";
+			};
+			name = Debug;
+		};
+		7217F2EC308B1BEC00F1E520 /* Release configuration for PBXNativeTarget "CommonsAppTests" */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = T95R5RRBC6;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.sohan.CommonsAppTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/CommonsApp.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/CommonsApp";
+			};
+			name = Release;
+		};
 		72767C033060EC860078788B /* Debug configuration for PBXProject "CommonsApp" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -868,6 +975,14 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		7217F2EA308B1BEC00F1E520 /* Build configuration list for PBXNativeTarget "CommonsAppTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				7217F2EB308B1BEC00F1E520 /* Debug configuration for PBXNativeTarget "CommonsAppTests" */,
+				7217F2EC308B1BEC00F1E520 /* Release configuration for PBXNativeTarget "CommonsAppTests" */,
+			);
+			defaultConfigurationName = Release;
+		};
 		72767BF33060EC830078788B /* Build configuration list for PBXProject "CommonsApp" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
