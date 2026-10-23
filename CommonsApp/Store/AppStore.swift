@@ -1602,13 +1602,21 @@ final class AppStore: ObservableObject {
                       let start = (data["start"] as? Timestamp)?.dateValue(),
                       start > Date() else { throw self.gymFailure("This slot is no longer available.") }
                 let capacity = setting.data()?["capacity"] as? Int ?? 0
+
+                if let errorMessage = GymBookingValidation.validate(
+                    members: members,
+                    userID: uid,
+                    capacity: capacity,
+                    cancel: cancel
+                ) {
+                    throw self.gymFailure(errorMessage)
+                }
+
                 var next = members
+
                 if cancel {
-                    guard members.contains(uid) else { throw self.gymFailure("No reservation to cancel.") }
                     next.removeAll { $0 == uid }
                 } else {
-                    guard !members.contains(uid) else { throw self.gymFailure("You already booked this slot.") }
-                    guard members.count < capacity else { throw self.gymFailure("This Gym slot is full.") }
                     next.append(uid)
                 }
                 transaction.updateData([
