@@ -90,6 +90,13 @@ struct AmenityBookingView: View {
                                 .foregroundStyle(mine ? Theme.appGreen : Theme.appMuted)
                         }
                         Spacer()
+
+                        if processingID == key {
+                            ProgressView()
+                                .tint(Theme.appPurple)
+                                .accessibilityLabel("Processing gym reservation")
+                        }
+
                         Button {
                             guard processingID == nil else { return }
                             processingID = key
@@ -111,11 +118,42 @@ struct AmenityBookingView: View {
                             Text(processingID == key ? "Wait…" : mine ? "Cancel" : "Book")
                                 .font(Theme.ui(12, weight: .bold))
                                 .foregroundStyle(mine ? Theme.appNavy : .white)
-                                .padding(.horizontal, 17).padding(.vertical, 11)
-                                .background(mine ? Theme.appPurpleSoft : Theme.appPurple,
-                                            in: Capsule())
+                                .padding(.horizontal, 17)
+                                .padding(.vertical, 11)
+                                .background(
+                                    mine ? Theme.appPurpleSoft : Theme.appPurple,
+                                    in: Capsule()
+                                )
+//                            HStack(spacing: 7) {
+//                                if processingID == key {
+//                                    ProgressView()
+//                                        .tint(mine ? Theme.appNavy : .white)
+//                                }
+//
+//                                Text(processingID == key ? "Wait…" : mine ? "Cancel" : "Book")
+//                                    .font(Theme.ui(12, weight: .bold))
+//                                    .foregroundStyle(mine ? Theme.appNavy : .white)
+//                            }
+//                            .padding(.horizontal, 17)
+//                            .padding(.vertical, 11)
+//                            .background(
+//                                mine ? Theme.appPurpleSoft : Theme.appPurple,
+//                                in: Capsule()
+//                            )
                         }
                         .disabled(processingID != nil || (!mine && remaining == 0))
+                        .accessibilityLabel(
+                            processingID == key
+                                ? "Processing gym reservation"
+                                : mine
+                                    ? "Cancel gym reservation at \(slot.start.formatted(date: .omitted, time: .shortened))"
+                                    : "Book gym session at \(slot.start.formatted(date: .omitted, time: .shortened))"
+                        )
+                        .accessibilityHint(
+                            mine
+                                ? "Cancels your existing gym reservation"
+                                : "\(remaining) spaces remaining"
+                        )
                     }
                     .padding(14)
                     .background(Theme.card, in: RoundedRectangle(cornerRadius: 17))

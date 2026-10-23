@@ -28,3 +28,20 @@ fix_chat_display.py
 .env
 .env.*
 !.env.example
+
+# Node dependencies
+node_modules/
+
+# Local development backups
+CommonsApp-maintenance-backup-*/
+gym-phase3-backup-*/
+activitykit-cleanup-backup/
+.admin-split-backup-*/
+*.backup
+*.backup-*
+*.before_*
+*.before-*
+*.before_cleanup
+firestore.rules.backup*
+phase26_testing_review.txt
+storage.maintenance-proposed.rules
