@@ -7,10 +7,10 @@
 
 import WidgetKit
 import SwiftUI
-
 @main
 struct CommonsWidgetBundle: WidgetBundle {
     var body: some Widget {
         CommonsAppWidget()
+        MaintenanceLiveActivity()
     }
 }
