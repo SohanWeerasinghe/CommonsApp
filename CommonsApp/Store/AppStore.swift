@@ -1451,6 +1451,7 @@ final class AppStore: ObservableObject {
             residentId: user.uid,
             title: cleanTitle
         )
+        HapticManager.success()
     }
     @MainActor
     func advanceStage(of request: MaintenanceRequest) async throws {
@@ -1615,12 +1616,14 @@ final class AppStore: ObservableObject {
                 title: "Gym Booking Cancelled",
                 body: "Your gym reservation has been cancelled."
             )
+            HapticManager.success()
         } else {
             await AppNotificationManager.shared.send(
                 id: "gym-confirmed-\(UUID().uuidString)",
                 title: "Gym Booking Confirmed",
                 body: "Your gym reservation has been confirmed."
             )
+            HapticManager.success()
 
             if let reminderDate = Calendar.current.date(
                 byAdding: .minute,

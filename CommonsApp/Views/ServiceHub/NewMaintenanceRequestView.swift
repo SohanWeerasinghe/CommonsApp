@@ -448,6 +448,7 @@ struct NewMaintenanceRequestView: View {
                                     title: title, details: details, photoData: photo)
                                 dismiss()
                             } catch {
+                                HapticManager.error()
                                 submissionError = error.localizedDescription
                             }
                             isSubmitting = false

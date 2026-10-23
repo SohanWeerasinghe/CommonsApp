@@ -97,8 +97,15 @@ struct AmenityBookingView: View {
                                 defer { processingID = nil }
                                 do {
                                     try await store.reserveGymSlot(slot, cancel: mine)
-                                    if !mine { confirmedSlot = slot; showConfirmation = true }
-                                } catch { errorText = error.localizedDescription }
+
+                                    if !mine {
+                                        confirmedSlot = slot
+                                        showConfirmation = true
+                                    }
+                                } catch {
+                                    HapticManager.error()
+                                    errorText = error.localizedDescription
+                                }
                             }
                         } label: {
                             Text(processingID == key ? "Wait…" : mine ? "Cancel" : "Book")
