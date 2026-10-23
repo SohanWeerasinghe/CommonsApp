@@ -11,6 +11,8 @@ import LocalAuthentication
 import FirebaseAuth
 import FirebaseFirestore
 import WidgetKit
+import UIKit
+
     // MARK: - App-wide state and Firestore listener references
 final class AppStore: ObservableObject {
     //Onboarding
@@ -92,7 +94,9 @@ final class AppStore: ObservableObject {
             onboardingStage = .signIn
             return false
         }
+        print("STARTUP DEBUG: Starting user reload")
         try await user.reload()
+        print("STARTUP DEBUG: User reload completed")
         guard user.isEmailVerified else {
             return false
         }
@@ -134,6 +138,7 @@ final class AppStore: ObservableObject {
     }
     @MainActor
     func restoreSession() async {
+        print("STARTUP DEBUG: restoreSession called")
         guard Auth.auth().currentUser != nil else {
             onboardingStage = .signIn
             return
@@ -154,7 +159,9 @@ final class AppStore: ObservableObject {
         }
         try await user.reload()
         // Check the administrator role using Firebase's verified ID token.
+        print("STARTUP DEBUG: Starting token refresh")
         let tokenResult = try await user.getIDTokenResult(forcingRefresh: true)
+        print("STARTUP DEBUG: Token refresh completed")
         let isAdmin = tokenResult.claims["admin"] as? Bool == true
         if isAdmin {
             onboardingStage = .admin
@@ -163,10 +170,12 @@ final class AppStore: ObservableObject {
             startGymListeners()
             return
         }
+        print("STARTUP DEBUG: Starting Firestore profile fetch")
         let document = try await Firestore.firestore()
             .collection("users")
             .document(user.uid)
-            .getDocument(source: .server)
+            .getDocument(source: .default)
+        print("STARTUP DEBUG: Firestore profile fetch completed")
         guard document.exists, let data = document.data() else {
             onboardingStage = .profileSetup
             return
@@ -654,6 +663,13 @@ final class AppStore: ObservableObject {
                                 senderName: senderName,
                                 message: text
                             )
+                            if UIApplication.shared.applicationState != .active {
+                                await AppNotificationManager.shared.send(
+                                    id: "chat-\(chatId)-\(document.documentID)",
+                                    title: senderName,
+                                    body: text
+                                )
+                            }
                         }
                     }
                     let messages: [ChatMessage] = documents.compactMap { document in
@@ -1551,6 +1567,41 @@ final class AppStore: ObservableObject {
             } catch {
                 errorPointer?.pointee = error as NSError
                 return nil
+            }
+        }
+
+        let notificationId = "gym-\(uid)-\(id)"
+
+        if cancel {
+            AppNotificationManager.shared.cancel(id: notificationId)
+
+            await AppNotificationManager.shared.send(
+                id: "gym-cancelled-\(UUID().uuidString)",
+                title: "Gym Booking Cancelled",
+                body: "Your gym reservation has been cancelled."
+            )
+        } else {
+            await AppNotificationManager.shared.send(
+                id: "gym-confirmed-\(UUID().uuidString)",
+                title: "Gym Booking Confirmed",
+                body: "Your gym reservation has been confirmed."
+            )
+
+            if let reminderDate = Calendar.current.date(
+                byAdding: .minute,
+                value: -30,
+                to: slot.start
+            ), reminderDate > Date() {
+                do {
+                    try await AppNotificationManager.shared.scheduleReminder(
+                        id: notificationId,
+                        title: "Gym Session Reminder",
+                        body: "Your gym session starts in 30 minutes.",
+                        date: reminderDate
+                    )
+                } catch {
+                    print("Gym reminder scheduling failed: \(error.localizedDescription)")
+                }
             }
         }
     }
