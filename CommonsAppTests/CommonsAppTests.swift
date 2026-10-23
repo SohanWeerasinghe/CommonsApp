@@ -495,4 +495,304 @@ struct CommonsAppTests {
     }
 
 
+    // MARK: - Phase 2.5 Event Eligibility
+
+    @Test func futureActiveEventAllowsRSVP() {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let event = BuildingEvent(
+            title: "Meeting",
+            date: now.addingTimeInterval(3600),
+            location: "Lobby",
+            firestoreId: "event-1"
+        )
+
+        #expect(EventValidation.canRSVP(event: event, now: now))
+    }
+
+    @Test func eventWithoutRSVPPermissionRejected() {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let event = BuildingEvent(
+            title: "Meeting",
+            date: now.addingTimeInterval(3600),
+            location: "Lobby",
+            allowsRSVP: false,
+            firestoreId: "event-1"
+        )
+
+        #expect(!EventValidation.canRSVP(event: event, now: now))
+    }
+
+    @Test func cancelledEventRejectsRSVP() {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let event = BuildingEvent(
+            title: "Meeting",
+            date: now.addingTimeInterval(3600),
+            location: "Lobby",
+            status: .cancelled,
+            firestoreId: "event-1"
+        )
+
+        #expect(!EventValidation.canRSVP(event: event, now: now))
+    }
+
+    @Test func pastEventRejectsRSVP() {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let event = BuildingEvent(
+            title: "Meeting",
+            date: now.addingTimeInterval(-3600),
+            location: "Lobby",
+            firestoreId: "event-1"
+        )
+
+        #expect(!EventValidation.canRSVP(event: event, now: now))
+    }
+
+    @Test func eventStartingNowRejectsRSVP() {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let event = BuildingEvent(
+            title: "Meeting",
+            date: now,
+            location: "Lobby",
+            firestoreId: "event-1"
+        )
+
+        #expect(!EventValidation.canRSVP(event: event, now: now))
+    }
+
+    @Test func eventWithoutFirestoreIDRejectsRSVP() {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let event = BuildingEvent(
+            title: "Meeting",
+            date: now.addingTimeInterval(3600),
+            location: "Lobby"
+        )
+
+        #expect(!EventValidation.canRSVP(event: event, now: now))
+    }
+
+    // MARK: - Event Editing
+
+    @Test func activeEventCanBeEdited() {
+        let event = BuildingEvent(
+            title: "Meeting",
+            date: Date(),
+            location: "Lobby",
+            firestoreId: "event-1"
+        )
+
+        #expect(EventValidation.canEdit(event: event))
+    }
+
+    @Test func cancelledEventCannotBeEdited() {
+        let event = BuildingEvent(
+            title: "Meeting",
+            date: Date(),
+            location: "Lobby",
+            status: .cancelled,
+            firestoreId: "event-1"
+        )
+
+        #expect(!EventValidation.canEdit(event: event))
+    }
+
+    @Test func eventWithoutIDCannotBeEdited() {
+        let event = BuildingEvent(
+            title: "Meeting",
+            date: Date(),
+            location: "Lobby"
+        )
+
+        #expect(!EventValidation.canEdit(event: event))
+    }
+
+    @Test func eventWithEmptyIDCannotBeEdited() {
+        let event = BuildingEvent(
+            title: "Meeting",
+            date: Date(),
+            location: "Lobby",
+            firestoreId: ""
+        )
+
+        #expect(!EventValidation.canEdit(event: event))
+    }
+
+    // MARK: - Event Cancellation
+
+    @Test func activeEventCanBeCancelled() {
+        let event = BuildingEvent(
+            title: "Meeting",
+            date: Date(),
+            location: "Lobby",
+            firestoreId: "event-1"
+        )
+
+        #expect(EventValidation.canCancel(event: event))
+    }
+
+    @Test func cancelledEventCannotBeCancelledAgain() {
+        let event = BuildingEvent(
+            title: "Meeting",
+            date: Date(),
+            location: "Lobby",
+            status: .cancelled,
+            firestoreId: "event-1"
+        )
+
+        #expect(!EventValidation.canCancel(event: event))
+    }
+
+    @Test func eventWithoutIDCannotBeCancelled() {
+        let event = BuildingEvent(
+            title: "Meeting",
+            date: Date(),
+            location: "Lobby"
+        )
+
+        #expect(!EventValidation.canCancel(event: event))
+    }
+
+    @Test func eventWithEmptyIDCannotBeCancelled() {
+        let event = BuildingEvent(
+            title: "Meeting",
+            date: Date(),
+            location: "Lobby",
+            firestoreId: ""
+        )
+
+        #expect(!EventValidation.canCancel(event: event))
+    }
+
+    // MARK: - Additional Event Input Boundaries
+
+    @Test func whitespaceAroundEventTitleAllowed() {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+
+        #expect(EventValidation.validate(
+            title: "  Meeting  ",
+            description: "",
+            location: "Lobby",
+            start: now.addingTimeInterval(3600),
+            end: now.addingTimeInterval(7200),
+            now: now
+        ))
+    }
+
+    @Test func whitespaceAroundEventLocationAllowed() {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+
+        #expect(EventValidation.validate(
+            title: "Meeting",
+            description: "",
+            location: "  Lobby  ",
+            start: now.addingTimeInterval(3600),
+            end: now.addingTimeInterval(7200),
+            now: now
+        ))
+    }
+
+    @Test func optionalEventDescriptionAllowed() {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+
+        #expect(EventValidation.validate(
+            title: "Meeting",
+            description: "",
+            location: "Lobby",
+            start: now.addingTimeInterval(3600),
+            end: now.addingTimeInterval(7200),
+            now: now
+        ))
+    }
+
+    @Test func whitespaceOnlyEventDescriptionAllowed() {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+
+        #expect(EventValidation.validate(
+            title: "Meeting",
+            description: "   ",
+            location: "Lobby",
+            start: now.addingTimeInterval(3600),
+            end: now.addingTimeInterval(7200),
+            now: now
+        ))
+    }
+
+    @Test func eventStartOneSecondInFutureAllowed() {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+
+        #expect(EventValidation.validate(
+            title: "Meeting",
+            description: "",
+            location: "Lobby",
+            start: now.addingTimeInterval(1),
+            end: now.addingTimeInterval(3600),
+            now: now
+        ))
+    }
+
+    // MARK: - Additional Maintenance Boundaries
+
+    @Test func maintenanceTitleOneCharacterAllowed() {
+        #expect(MaintenanceValidation.validate(
+            title: "A",
+            details: "Broken light"
+        ))
+    }
+
+    @Test func maintenanceDetailsOneCharacterAllowed() {
+        #expect(MaintenanceValidation.validate(
+            title: "Broken light",
+            details: "A"
+        ))
+    }
+
+    @Test func maintenanceTitleWhitespaceTrimmed() {
+        #expect(MaintenanceValidation.validate(
+            title: "  Broken light  ",
+            details: "Needs repair"
+        ))
+    }
+
+    @Test func maintenanceDetailsWhitespaceTrimmed() {
+        #expect(MaintenanceValidation.validate(
+            title: "Broken light",
+            details: "  Needs repair  "
+        ))
+    }
+
+    // MARK: - Additional Gym Boundaries
+
+    @Test func gymBookingAtCapacityOneAllowed() {
+        let result = GymBookingValidation.validate(
+            members: [],
+            userID: "resident-1",
+            capacity: 1,
+            cancel: false
+        )
+
+        #expect(result == nil)
+    }
+
+    @Test func gymBookingAtCapacityOneFullRejected() {
+        let result = GymBookingValidation.validate(
+            members: ["resident-1"],
+            userID: "resident-2",
+            capacity: 1,
+            cancel: false
+        )
+
+        #expect(result == "This Gym slot is full.")
+    }
+
+    @Test func gymCancellationAllowedEvenWhenSlotFull() {
+        let result = GymBookingValidation.validate(
+            members: ["resident-1"],
+            userID: "resident-1",
+            capacity: 1,
+            cancel: true
+        )
+
+        #expect(result == nil)
+    }
+
+
 }

@@ -61,4 +61,47 @@ struct EventValidation {
 
         return true
     }
+
+    static func canRSVP(
+        event: BuildingEvent,
+        now: Date = Date()
+    ) -> Bool {
+
+        if event.firestoreId == nil || event.firestoreId == "" {
+            return false
+        }
+
+        if !event.allowsRSVP {
+            return false
+        }
+
+        if event.isCancelled {
+            return false
+        }
+
+        if event.date <= now {
+            return false
+        }
+
+        return true
+    }
+
+    static func canEdit(event: BuildingEvent) -> Bool {
+
+        guard let id = event.firestoreId, !id.isEmpty else {
+            return false
+        }
+
+        return !event.isCancelled
+    }
+
+    static func canCancel(event: BuildingEvent) -> Bool {
+
+        guard let id = event.firestoreId, !id.isEmpty else {
+            return false
+        }
+
+        return !event.isCancelled
+    }
+
 }

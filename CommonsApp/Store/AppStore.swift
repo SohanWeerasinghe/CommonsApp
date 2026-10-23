@@ -1183,10 +1183,7 @@ final class AppStore: ObservableObject {
         guard onboardingStage == .active,
               let uid = Auth.auth().currentUser?.uid,
               let eventId = event.firestoreId,
-              !eventId.isEmpty,
-              event.allowsRSVP,
-              !event.isCancelled,
-              event.date > Date() else {
+              EventValidation.canRSVP(event: event) else {
             eventsError = "RSVP is not available for this event."
             return
         }
@@ -1244,8 +1241,10 @@ final class AppStore: ObservableObject {
         let action: String
         let batch = db.batch()
         if let existing {
-            guard let id = existing.firestoreId, !id.isEmpty,
-                  !existing.isCancelled else { throw eventError("This event cannot be edited.") }
+            guard let id = existing.firestoreId,
+                  EventValidation.canEdit(event: existing) else {
+                throw eventError("This event cannot be edited.")
+            }
             eventRef = db.collection("events").document(id)
             action = "updated"
             batch.updateData([
@@ -1294,8 +1293,10 @@ final class AppStore: ObservableObject {
     func cancelCommunityEvent(_ event: BuildingEvent) async throws {
         guard onboardingStage == .admin,
               let user = Auth.auth().currentUser,
-              let id = event.firestoreId, !id.isEmpty,
-              !event.isCancelled else { throw eventError("Cannot cancel this event.") }
+              let id = event.firestoreId,
+              EventValidation.canCancel(event: event) else {
+            throw eventError("Cannot cancel this event.")
+        }
         let token = try await user.getIDTokenResult(forcingRefresh: true)
         guard token.claims["admin"] as? Bool == true else {
             throw eventError("Administrator permission was not verified.")
