@@ -1,13 +1,16 @@
 import SwiftUI
 import FirebaseAuth
-
+import FirebaseCore
+import GoogleSignIn
+import UIKit
 // CommonsApp authentication. The Firebase and onboarding flows are unchanged.
 struct SignInView: View {
+    @EnvironmentObject private var store: AppStore
     @State private var showEmailForm = false
-
+    @State private var isGoogleLoading = false
+    @State private var googleError = ""
     private let navy = Color(red: 0.10, green: 0.14, blue: 0.23)
     private let violet = Color(red: 0.43, green: 0.36, blue: 0.88)
-
     var body: some View {
         GeometryReader { geometry in
             ScrollView {
@@ -21,25 +24,20 @@ struct SignInView: View {
                     }
                     .foregroundStyle(navy)
                     .padding(.top, 22)
-
                     welcomeArtwork
                         .padding(.top, 28)
-
                     Text("Your community.\nAll in one place.")
                         .font(.system(size: 36, weight: .bold, design: .rounded))
                         .tracking(-1.3)
                         .foregroundStyle(navy)
                         .fixedSize(horizontal: false, vertical: true)
                         .padding(.top, 30)
-
                     Text("Stay connected with neighbours, discover events and keep up with what matters in your building.")
                         .font(.system(size: 15))
                         .foregroundStyle(Color(red: 0.44, green: 0.48, blue: 0.57))
                         .lineSpacing(4)
                         .padding(.top, 12)
-
                     Spacer(minLength: 34)
-
                     Button {
                         showEmailForm = true
                     } label: {
@@ -57,7 +55,37 @@ struct SignInView: View {
                         .background(violet, in: RoundedRectangle(cornerRadius: 19))
                     }
                     .buttonStyle(.plain)
-
+                    // MARK: - Google authentication button
+                    Button {
+                        Task { await signInWithGoogle() }
+                    } label: {
+                        HStack(spacing: 12) {
+                            Spacer()
+                            if isGoogleLoading {
+                                ProgressView()
+                            } else {
+                                Text("G")
+                                    .font(.system(size: 20, weight: .bold))
+                                    .foregroundStyle(Color(red: 0.26, green: 0.52, blue: 0.96))
+                            }
+                            Text("Continue with Google")
+                                .font(.system(size: 16, weight: .semibold))
+                            Spacer()
+                        }
+                        .foregroundStyle(navy)
+                        .frame(height: 58)
+                        .background(.white, in: RoundedRectangle(cornerRadius: 19))
+                        .overlay(RoundedRectangle(cornerRadius: 19).stroke(Color.gray.opacity(0.25)))
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(isGoogleLoading)
+                    .padding(.top, 12)
+                    if !googleError.isEmpty {
+                        Text(googleError)
+                            .font(.system(size: 13))
+                            .foregroundStyle(.red)
+                            .padding(.top, 10)
+                    }
                     HStack(spacing: 6) {
                         Image(systemName: "lock.shield")
                         Text("A private space for your building")
@@ -78,7 +106,39 @@ struct SignInView: View {
             EmailAuthFormView()
         }
     }
-
+    // MARK: - Sign in using Google and the existing resident approval flow
+    @MainActor
+    private func signInWithGoogle() async {
+        if isGoogleLoading { return }
+        isGoogleLoading = true
+        googleError = ""
+        defer { isGoogleLoading = false }
+        do {
+            guard let clientID = FirebaseApp.app()?.options.clientID else {
+                googleError = "Google configuration is missing. Check GoogleService-Info.plist."
+                return
+            }
+            guard let windowScene = UIApplication.shared.connectedScenes.first(where: { $0.activationState == .foregroundActive }) as? UIWindowScene,
+                  let window = windowScene.windows.first(where: { $0.isKeyWindow }),
+                  let viewController = window.rootViewController else {
+                googleError = "Unable to open Google Sign-In. Please try again."
+                return
+            }
+            GIDSignIn.sharedInstance.configuration = GIDConfiguration(clientID: clientID)
+            let result = try await GIDSignIn.sharedInstance.signIn(withPresenting: viewController)
+            guard let idToken = result.user.idToken?.tokenString else {
+                googleError = "Google did not return an ID token."
+                return
+            }
+            let accessToken = result.user.accessToken.tokenString
+            let credential = GoogleAuthProvider.credential(withIDToken: idToken, accessToken: accessToken)
+            try await Auth.auth().signIn(with: credential)
+            store.pendingEmail = Auth.auth().currentUser?.email ?? ""
+            try await store.loadResidentAccountStatus()
+        } catch {
+            googleError = error.localizedDescription
+        }
+    }
     private var welcomeArtwork: some View {
         ZStack {
             RoundedRectangle(cornerRadius: 30)
@@ -91,17 +151,14 @@ struct SignInView: View {
                         endPoint: .bottomTrailing
                     )
                 )
-
             Circle()
                 .fill(.white.opacity(0.12))
                 .frame(width: 240, height: 240)
                 .offset(x: 120, y: -80)
-
             Circle()
                 .fill(.white.opacity(0.09))
                 .frame(width: 180, height: 180)
                 .offset(x: -120, y: 100)
-
             VStack(spacing: 16) {
                 Image(systemName: "building.2.crop.circle.fill")
                     .font(.system(size: 90, weight: .ultraLight))
@@ -117,27 +174,22 @@ struct SignInView: View {
         .accessibilityLabel("Commons community illustration")
     }
 }
-
 private struct EmailAuthFormView: View {
     @EnvironmentObject private var store: AppStore
     @Environment(\.dismiss) private var dismiss
-
     @State private var email = ""
     @State private var password = ""
     @State private var isRegistering = true
     @State private var isLoading = false
     @State private var errorMessage = ""
     @State private var showsPassword = false
-
     private let navy = Color(red: 0.10, green: 0.14, blue: 0.23)
     private let violet = Color(red: 0.43, green: 0.36, blue: 0.88)
     private let muted = Color(red: 0.46, green: 0.49, blue: 0.58)
     private let background = Color(red: 0.976, green: 0.975, blue: 0.992)
-
     private var canSubmit: Bool {
         !isLoading && !email.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !password.isEmpty
     }
-
     var body: some View {
         NavigationStack {
             ScrollView {
@@ -150,14 +202,12 @@ private struct EmailAuthFormView: View {
                     .font(.system(size: 12, weight: .heavy, design: .rounded))
                     .foregroundStyle(violet)
                     .padding(.top, 30)
-
                     Text(isRegistering ? "Join your\ncommunity." : "Welcome\nback.")
                         .font(.system(size: 37, weight: .bold, design: .rounded))
                         .tracking(-1.2)
                         .foregroundStyle(navy)
                         .fixedSize(horizontal: false, vertical: true)
                         .padding(.top, 20)
-
                     Text(isRegistering
                          ? "Create an account to connect with your building."
                          : "Sign in to pick up where you left off.")
@@ -165,13 +215,11 @@ private struct EmailAuthFormView: View {
                         .foregroundStyle(muted)
                         .padding(.top, 10)
                         .padding(.bottom, 30)
-
                     VStack(alignment: .leading, spacing: 9) {
                         Text("EMAIL ADDRESS")
                             .font(.system(size: 11, weight: .bold))
                             .tracking(1.2)
                             .foregroundStyle(muted)
-
                         HStack(spacing: 12) {
                             Image(systemName: "envelope")
                                 .foregroundStyle(violet)
@@ -188,18 +236,15 @@ private struct EmailAuthFormView: View {
                         .frame(height: 58)
                         .background(.white, in: RoundedRectangle(cornerRadius: 17))
                     }
-
                     VStack(alignment: .leading, spacing: 9) {
                         Text("PASSWORD")
                             .font(.system(size: 11, weight: .bold))
                             .tracking(1.2)
                             .foregroundStyle(muted)
-
                         HStack(spacing: 12) {
                             Image(systemName: "lock")
                                 .foregroundStyle(violet)
                                 .frame(width: 20)
-
                             Group {
                                 if showsPassword {
                                     TextField("Enter your password", text: $password)
@@ -210,7 +255,6 @@ private struct EmailAuthFormView: View {
                             .textContentType(isRegistering ? .newPassword : .password)
                             .textInputAutocapitalization(.never)
                             .autocorrectionDisabled()
-
                             Button {
                                 showsPassword.toggle()
                             } label: {
@@ -224,7 +268,6 @@ private struct EmailAuthFormView: View {
                         .padding(.horizontal, 17)
                         .frame(height: 58)
                         .background(.white, in: RoundedRectangle(cornerRadius: 17))
-
                         if isRegistering {
                             Text("Use at least 6 characters.")
                                 .font(.system(size: 12))
@@ -232,7 +275,6 @@ private struct EmailAuthFormView: View {
                         }
                     }
                     .padding(.top, 22)
-
                     if !errorMessage.isEmpty {
                         Label(errorMessage, systemImage: "exclamationmark.circle.fill")
                             .font(.system(size: 13))
@@ -243,7 +285,6 @@ private struct EmailAuthFormView: View {
                             .background(Color.red.opacity(0.07), in: RoundedRectangle(cornerRadius: 14))
                             .padding(.top, 18)
                     }
-
                     Button {
                         Task { await authenticate() }
                     } label: {
@@ -265,7 +306,6 @@ private struct EmailAuthFormView: View {
                     .buttonStyle(.plain)
                     .disabled(!canSubmit)
                     .padding(.top, 28)
-
                     Button {
                         isRegistering.toggle()
                         errorMessage = ""
@@ -299,20 +339,16 @@ private struct EmailAuthFormView: View {
             .toolbarBackground(.visible, for: .navigationBar)
         }
     }
-
     @MainActor
     private func authenticate() async {
         let cleanEmail = email.trimmingCharacters(in: .whitespacesAndNewlines)
-
         guard !cleanEmail.isEmpty, password.count >= 6 else {
             errorMessage = "Enter a valid email and a password with at least 6 characters."
             return
         }
-
         isLoading = true
         errorMessage = ""
         defer { isLoading = false }
-
         do {
             if isRegistering {
                 let result = try await Auth.auth().createUser(
@@ -336,7 +372,6 @@ private struct EmailAuthFormView: View {
         }
     }
 }
-
 #Preview {
     SignInView()
         .environmentObject(AppStore())
