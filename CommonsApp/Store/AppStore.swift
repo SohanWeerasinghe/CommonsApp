@@ -1349,6 +1349,14 @@ final class AppStore: ObservableObject {
                                               stage: stage, residentId: residentId,
                                               photoPath: data["photoPath"] as? String)
                 }.sorted { $0.submittedAt > $1.submittedAt }
+
+                // Synchronize existing Live Activities with Firestore stages.
+                if self.onboardingStage == .active {
+                    await MaintenanceActivityManager.shared.synchronize(
+                        requests: self.maintenanceRequests,
+                        residentId: uid
+                    )
+                }
             }
         }
     }
@@ -1385,6 +1393,13 @@ final class AppStore: ObservableObject {
         ]
         try await Firestore.firestore().collection("maintenanceRequests")
             .document(requestId).setData(fields)
+
+        // Start the Live Activity only after Firestore saves successfully.
+        await MaintenanceActivityManager.shared.start(
+            requestId: requestId,
+            residentId: user.uid,
+            title: cleanTitle
+        )
     }
     @MainActor
     func advanceStage(of request: MaintenanceRequest) async throws {

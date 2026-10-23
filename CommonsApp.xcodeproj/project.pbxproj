@@ -20,6 +20,10 @@
 		7217F2C0308A59D700F1E520 /* CommunityInspirationCarousel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7217F2BF308A59D700F1E520 /* CommunityInspirationCarousel.swift */; };
 		7217F2C3308A94F000F1E520 /* GoogleSignIn in Frameworks */ = {isa = PBXBuildFile; productRef = 7217F2C2308A94F000F1E520 /* GoogleSignIn */; };
 		7217F2C5308A94F000F1E520 /* GoogleSignInSwift in Frameworks */ = {isa = PBXBuildFile; productRef = 7217F2C4308A94F000F1E520 /* GoogleSignInSwift */; };
+		7217F2C8308AED5D00F1E520 /* MaintenanceActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7217F2C7308AED5D00F1E520 /* MaintenanceActivityAttributes.swift */; };
+		7217F2C9308AED5D00F1E520 /* MaintenanceActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7217F2C7308AED5D00F1E520 /* MaintenanceActivityAttributes.swift */; };
+		7217F2CB308AED7900F1E520 /* MaintenanceActivityManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7217F2CA308AED7900F1E520 /* MaintenanceActivityManager.swift */; };
+		7217F2CD308AED9100F1E520 /* MaintenanceLiveActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7217F2CC308AED9100F1E520 /* MaintenanceLiveActivity.swift */; };
 		72387211306BB0570061D2FD /* CommonsAppApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7238720E306BB0570061D2FD /* CommonsAppApp.swift */; };
 		72387212306BB0570061D2FD /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 72387210306BB0570061D2FD /* RootView.swift */; };
 		72387213306BB0570061D2FD /* MainTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7238720F306BB0570061D2FD /* MainTabView.swift */; };
@@ -41,7 +45,6 @@
 		7238724D306BB0F70061D2FD /* AdminPanelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7238721C306BB0F70061D2FD /* AdminPanelView.swift */; };
 		7238724E306BB0F70061D2FD /* ResidentProfileView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 72387227306BB0F70061D2FD /* ResidentProfileView.swift */; };
 		7238724F306BB0F70061D2FD /* NewPostView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 72387225306BB0F70061D2FD /* NewPostView.swift */; };
-		72387250306BB0F70061D2FD /* MaintenanceLiveActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7238723C306BB0F70061D2FD /* MaintenanceLiveActivity.swift */; };
 		72387251306BB0F70061D2FD /* WaitingRoomView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7238722E306BB0F70061D2FD /* WaitingRoomView.swift */; };
 		72387252306BB0F70061D2FD /* PostDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 72387226306BB0F70061D2FD /* PostDetailView.swift */; };
 		72387253306BB0F70061D2FD /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 72387216306BB0F70061D2FD /* Models.swift */; };
@@ -100,6 +103,9 @@
 		7217F2BD308A4C1F00F1E520 /* ChatProfilePhotoLoader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatProfilePhotoLoader.swift; sourceTree = "<group>"; };
 		7217F2BF308A59D700F1E520 /* CommunityInspirationCarousel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommunityInspirationCarousel.swift; sourceTree = "<group>"; };
 		7217F2C6308A952000F1E520 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		7217F2C7308AED5D00F1E520 /* MaintenanceActivityAttributes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MaintenanceActivityAttributes.swift; sourceTree = "<group>"; };
+		7217F2CA308AED7900F1E520 /* MaintenanceActivityManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MaintenanceActivityManager.swift; sourceTree = "<group>"; };
+		7217F2CC308AED9100F1E520 /* MaintenanceLiveActivity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MaintenanceLiveActivity.swift; sourceTree = "<group>"; };
 		7238720E306BB0570061D2FD /* CommonsAppApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommonsAppApp.swift; sourceTree = "<group>"; };
 		7238720F306BB0570061D2FD /* MainTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainTabView.swift; sourceTree = "<group>"; };
 		72387210306BB0570061D2FD /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
@@ -129,7 +135,6 @@
 		72387237306BB0F70061D2FD /* AppLockView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppLockView.swift; sourceTree = "<group>"; };
 		72387238306BB0F70061D2FD /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		7238723B306BB0F70061D2FD /* CommonsWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommonsWidget.swift; sourceTree = "<group>"; };
-		7238723C306BB0F70061D2FD /* MaintenanceLiveActivity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MaintenanceLiveActivity.swift; sourceTree = "<group>"; };
 		72514387306BA71800F85646 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		7251438B306BA72600F85646 /* CommonsApp.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = CommonsApp.txt; sourceTree = "<group>"; };
 		725EBFAD306BB3980071F507 /* yolo11n.mlpackage */ = {isa = PBXFileReference; lastKnownFileType = folder.mlpackage; name = yolo11n.mlpackage; path = Views/ServiceHub/MaintenanceAI/Models/yolo11n.mlpackage; sourceTree = "<group>"; };
@@ -337,7 +342,6 @@
 			isa = PBXGroup;
 			children = (
 				7238723B306BB0F70061D2FD /* CommonsWidget.swift */,
-				7238723C306BB0F70061D2FD /* MaintenanceLiveActivity.swift */,
 			);
 			path = Widgets;
 			sourceTree = "<group>";
@@ -345,6 +349,9 @@
 		72514388306BA71800F85646 /* CommonsApp */ = {
 			isa = PBXGroup;
 			children = (
+				7217F2CC308AED9100F1E520 /* MaintenanceLiveActivity.swift */,
+				7217F2CA308AED7900F1E520 /* MaintenanceActivityManager.swift */,
+				7217F2C7308AED5D00F1E520 /* MaintenanceActivityAttributes.swift */,
 				7217F2C6308A952000F1E520 /* Info.plist */,
 				7217F2BB308A457B00F1E520 /* ProfilePhotoStore.swift */,
 				7217F2B5308A1BC000F1E520 /* CommonsSiriIntents.swift */,
@@ -515,6 +522,7 @@
 				7238723F306BB0F70061D2FD /* ChatListView.swift in Sources */,
 				7217F2C0308A59D700F1E520 /* CommunityInspirationCarousel.swift in Sources */,
 				72387240306BB0F70061D2FD /* EventDetailView.swift in Sources */,
+				7217F2C9308AED5D00F1E520 /* MaintenanceActivityAttributes.swift in Sources */,
 				72387241306BB0F70061D2FD /* SignInView.swift in Sources */,
 				72387242306BB0F70061D2FD /* EventCalendarView.swift in Sources */,
 				AABBCC001122334455667799 /* CommunityEventEditor.swift in Sources */,
@@ -534,6 +542,7 @@
 				7238724B306BB0F70061D2FD /* NewMaintenanceRequestView.swift in Sources */,
 				7217F2BA308A3DAC00F1E520 /* EditProfileView.swift in Sources */,
 				7238724C306BB0F70061D2FD /* LendBorrowView.swift in Sources */,
+				7217F2CB308AED7900F1E520 /* MaintenanceActivityManager.swift in Sources */,
 				7278C559306E65FA00B4E143 /* MaintenanceYOLO.mlpackage in Sources */,
 				7238724D306BB0F70061D2FD /* AdminPanelView.swift in Sources */,
 				EF68A629E60E4E8087EC4095 /* AdminGymManagementView.swift in Sources */,
@@ -543,7 +552,6 @@
 				D2611236F9284CE986E611D7 /* AdminEventsView.swift in Sources */,
 				7238724E306BB0F70061D2FD /* ResidentProfileView.swift in Sources */,
 				7238724F306BB0F70061D2FD /* NewPostView.swift in Sources */,
-				72387250306BB0F70061D2FD /* MaintenanceLiveActivity.swift in Sources */,
 				72387251306BB0F70061D2FD /* WaitingRoomView.swift in Sources */,
 				72387252306BB0F70061D2FD /* PostDetailView.swift in Sources */,
 				72387253306BB0F70061D2FD /* Models.swift in Sources */,
@@ -558,6 +566,8 @@
 		72767C6F3067C9C80078788B /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			files = (
+				7217F2CD308AED9100F1E520 /* MaintenanceLiveActivity.swift in Sources */,
+				7217F2C8308AED5D00F1E520 /* MaintenanceActivityAttributes.swift in Sources */,
 			);
 		};
 /* End PBXSourcesBuildPhase section */
@@ -707,6 +717,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = CommonsApp/Info.plist;
 				INFOPLIST_KEY_NSFaceIDUsageDescription = "CommonsApp uses Face ID to protect access to your account and personal information.";
+				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -747,6 +758,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = CommonsApp/Info.plist;
 				INFOPLIST_KEY_NSFaceIDUsageDescription = "CommonsApp uses Face ID to protect access to your account and personal information.";
+				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
