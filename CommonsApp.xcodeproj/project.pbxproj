@@ -26,6 +26,7 @@
 		7217F2CD308AED9100F1E520 /* MaintenanceLiveActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7217F2CC308AED9100F1E520 /* MaintenanceLiveActivity.swift */; };
 		7217F2EE308B1F3D00F1E520 /* MaintenanceValidation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7217F2ED308B1F3B00F1E520 /* MaintenanceValidation.swift */; };
 		7217F2F0308B22B900F1E520 /* GymBookingValidation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7217F2EF308B22B300F1E520 /* GymBookingValidation.swift */; };
+		7217F2F2308B255C00F1E520 /* EventValidation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7217F2F1308B255300F1E520 /* EventValidation.swift */; };
 		72387211306BB0570061D2FD /* CommonsAppApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7238720E306BB0570061D2FD /* CommonsAppApp.swift */; };
 		72387212306BB0570061D2FD /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 72387210306BB0570061D2FD /* RootView.swift */; };
 		72387213306BB0570061D2FD /* MainTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7238720F306BB0570061D2FD /* MainTabView.swift */; };
@@ -118,6 +119,7 @@
 		7217F2E4308B1BEC00F1E520 /* CommonsAppTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CommonsAppTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		7217F2ED308B1F3B00F1E520 /* MaintenanceValidation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MaintenanceValidation.swift; sourceTree = "<group>"; };
 		7217F2EF308B22B300F1E520 /* GymBookingValidation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GymBookingValidation.swift; sourceTree = "<group>"; };
+		7217F2F1308B255300F1E520 /* EventValidation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventValidation.swift; sourceTree = "<group>"; };
 		7238720E306BB0570061D2FD /* CommonsAppApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommonsAppApp.swift; sourceTree = "<group>"; };
 		7238720F306BB0570061D2FD /* MainTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainTabView.swift; sourceTree = "<group>"; };
 		72387210306BB0570061D2FD /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
@@ -238,6 +240,7 @@
 		72387217306BB0F70061D2FD /* Models */ = {
 			isa = PBXGroup;
 			children = (
+				7217F2F1308B255300F1E520 /* EventValidation.swift */,
 				7217F2EF308B22B300F1E520 /* GymBookingValidation.swift */,
 				7217F2ED308B1F3B00F1E520 /* MaintenanceValidation.swift */,
 				72387216306BB0F70061D2FD /* Models.swift */,
@@ -616,6 +619,7 @@
 				7217F2BC308A457C00F1E520 /* ProfilePhotoStore.swift in Sources */,
 				7217F2B8308A1BCD00F1E520 /* SiriNavigation.swift in Sources */,
 				72387249306BB0F70061D2FD /* ServiceHubView.swift in Sources */,
+				7217F2F2308B255C00F1E520 /* EventValidation.swift in Sources */,
 				7217F2EE308B1F3D00F1E520 /* MaintenanceValidation.swift in Sources */,
 				7217F2BE308A4C2200F1E520 /* ChatProfilePhotoLoader.swift in Sources */,
 				7238724A306BB0F70061D2FD /* BookingConfirmedView.swift in Sources */,

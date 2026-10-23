@@ -321,4 +321,178 @@ struct CommonsAppTests {
         #expect(result == "This Gym slot is full.")
     }
 
+
+    // MARK: - Event Validation
+
+    @Test func validEventDetails() {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+
+        let result = EventValidation.validate(
+            title: "Community Meeting",
+            description: "Monthly meeting",
+            location: "Lobby",
+            start: now.addingTimeInterval(3600),
+            end: now.addingTimeInterval(7200),
+            now: now
+        )
+
+        #expect(result)
+    }
+
+    @Test func emptyEventTitleRejected() {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+
+        #expect(!EventValidation.validate(
+            title: "   ",
+            description: "",
+            location: "Lobby",
+            start: now.addingTimeInterval(3600),
+            end: now.addingTimeInterval(7200),
+            now: now
+        ))
+    }
+
+    @Test func eventTitleLengthBoundary() {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+
+        let valid = EventValidation.validate(
+            title: String(repeating: "A", count: 100),
+            description: "",
+            location: "Lobby",
+            start: now.addingTimeInterval(3600),
+            end: now.addingTimeInterval(7200),
+            now: now
+        )
+
+        let invalid = EventValidation.validate(
+            title: String(repeating: "A", count: 101),
+            description: "",
+            location: "Lobby",
+            start: now.addingTimeInterval(3600),
+            end: now.addingTimeInterval(7200),
+            now: now
+        )
+
+        #expect(valid)
+        #expect(!invalid)
+    }
+
+    @Test func emptyEventLocationRejected() {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+
+        #expect(!EventValidation.validate(
+            title: "Community Meeting",
+            description: "",
+            location: "   ",
+            start: now.addingTimeInterval(3600),
+            end: now.addingTimeInterval(7200),
+            now: now
+        ))
+    }
+
+    @Test func eventLocationLengthBoundary() {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+
+        let valid = EventValidation.validate(
+            title: "Meeting",
+            description: "",
+            location: String(repeating: "L", count: 200),
+            start: now.addingTimeInterval(3600),
+            end: now.addingTimeInterval(7200),
+            now: now
+        )
+
+        let invalid = EventValidation.validate(
+            title: "Meeting",
+            description: "",
+            location: String(repeating: "L", count: 201),
+            start: now.addingTimeInterval(3600),
+            end: now.addingTimeInterval(7200),
+            now: now
+        )
+
+        #expect(valid)
+        #expect(!invalid)
+    }
+
+    @Test func eventDescriptionLengthBoundary() {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+
+        let valid = EventValidation.validate(
+            title: "Meeting",
+            description: String(repeating: "D", count: 2000),
+            location: "Lobby",
+            start: now.addingTimeInterval(3600),
+            end: now.addingTimeInterval(7200),
+            now: now
+        )
+
+        let invalid = EventValidation.validate(
+            title: "Meeting",
+            description: String(repeating: "D", count: 2001),
+            location: "Lobby",
+            start: now.addingTimeInterval(3600),
+            end: now.addingTimeInterval(7200),
+            now: now
+        )
+
+        #expect(valid)
+        #expect(!invalid)
+    }
+
+    @Test func pastEventStartRejected() {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+
+        #expect(!EventValidation.validate(
+            title: "Meeting",
+            description: "",
+            location: "Lobby",
+            start: now.addingTimeInterval(-3600),
+            end: now.addingTimeInterval(7200),
+            now: now
+        ))
+    }
+
+    @Test func eventEndBeforeStartRejected() {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+
+        #expect(!EventValidation.validate(
+            title: "Meeting",
+            description: "",
+            location: "Lobby",
+            start: now.addingTimeInterval(7200),
+            end: now.addingTimeInterval(3600),
+            now: now
+        ))
+    }
+
+    @Test func eventEndEqualToStartRejected() {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+
+        #expect(!EventValidation.validate(
+            title: "Meeting",
+            description: "",
+            location: "Lobby",
+            start: now.addingTimeInterval(3600),
+            end: now.addingTimeInterval(3600),
+            now: now
+        ))
+    }
+
+    @Test func eventStartEqualToNowRejected() {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+
+        let result = EventValidation.validate(
+            title: "Community Meeting",
+            description: "",
+            location: "Lobby",
+            start: now,
+            end: now.addingTimeInterval(3600),
+            now: now
+        )
+
+        #expect(!result)
+    }
+
+
 }
