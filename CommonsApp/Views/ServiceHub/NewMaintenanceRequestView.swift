@@ -130,6 +130,14 @@ struct NewMaintenanceRequestView: View {
                                 }
                             }
                             .buttonStyle(.plain)
+                            .accessibilityLabel(
+                                selectedImage == nil
+                                    ? "Choose a maintenance issue photo"
+                                    : "Change maintenance issue photo"
+                            )
+                            .accessibilityHint(
+                                "Opens the photo library to select an image for on-device analysis"
+                            )
                             .onChange(of: selectedPhoto) { _, newPhoto in
                                 Task {
                                     await loadSelectedPhoto(newPhoto)
@@ -160,6 +168,8 @@ struct NewMaintenanceRequestView: View {
                                 .foregroundStyle(Theme.appMuted)
 
                             TextField("e.g. Kitchen faucet leak", text: $title)
+                                .accessibilityLabel("Issue title")
+                                .accessibilityHint("Enter a short description of the maintenance problem")
                                 .font(Theme.ui(14))
                                 .foregroundStyle(Theme.appNavy)
                                 .padding(.horizontal, 14)
@@ -191,6 +201,8 @@ struct NewMaintenanceRequestView: View {
                                 }
 
                                 TextEditor(text: $details)
+                                    .accessibilityLabel("Issue details")
+                                    .accessibilityHint("Describe the maintenance problem in more detail")
                                     .font(Theme.ui(14))
                                     .foregroundStyle(Theme.appNavy)
                                     .scrollContentBackground(.hidden)
@@ -423,6 +435,33 @@ struct NewMaintenanceRequestView: View {
                         .clipShape(
                             RoundedRectangle(cornerRadius: 10)
                         )
+
+                        if isSubmitting {
+                            HStack(spacing: 12) {
+                                ProgressView()
+                                    .tint(Theme.appPurple)
+
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text("Submitting your request")
+                                        .font(Theme.ui(13, weight: .semibold))
+                                        .foregroundStyle(Theme.appNavy)
+
+                                    Text("Please wait while your request is saved.")
+                                        .font(Theme.ui(11))
+                                        .foregroundStyle(Theme.appMuted)
+                                }
+
+                                Spacer()
+                            }
+                            .padding(14)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(
+                                Theme.appPurpleSoft,
+                                in: RoundedRectangle(cornerRadius: 14)
+                            )
+                            .accessibilityElement(children: .combine)
+                            .accessibilityLabel("Submitting maintenance request. Please wait.")
+                        }
                     }
                     .padding(16)
                 }
@@ -463,6 +502,14 @@ struct NewMaintenanceRequestView: View {
                         details.trimmingCharacters(
                             in: .whitespacesAndNewlines
                         ).isEmpty
+                    )
+                    .accessibilityLabel(
+                        isSubmitting ? "Submitting maintenance request" : "Submit maintenance request"
+                    )
+                    .accessibilityHint(
+                        isSubmitting
+                            ? "Please wait while your request is saved"
+                            : "Submits your maintenance request to building management"
                     )
                 }
             }
