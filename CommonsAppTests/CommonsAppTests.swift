@@ -149,4 +149,69 @@ struct CommonsAppTests {
 
         #expect(thread.lastMessage == nil)
     }
+
+    // MARK: - Maintenance Validation
+
+    @Test func validMaintenanceRequest() {
+        #expect(MaintenanceValidation.validate(
+            title: "Water leak",
+            details: "Water leaking under the kitchen sink."
+        ))
+    }
+
+    @Test func emptyMaintenanceTitle() {
+        #expect(!MaintenanceValidation.validate(
+            title: "",
+            details: "Water leaking."
+        ))
+    }
+
+    @Test func whitespaceOnlyMaintenanceTitle() {
+        #expect(!MaintenanceValidation.validate(
+            title: "   ",
+            details: "Water leaking."
+        ))
+    }
+
+    @Test func emptyMaintenanceDetails() {
+        #expect(!MaintenanceValidation.validate(
+            title: "Water leak",
+            details: ""
+        ))
+    }
+
+    @Test func whitespaceOnlyMaintenanceDetails() {
+        #expect(!MaintenanceValidation.validate(
+            title: "Water leak",
+            details: "   "
+        ))
+    }
+
+    @Test func maintenanceTitleAtMaximumLength() {
+        #expect(MaintenanceValidation.validate(
+            title: String(repeating: "A", count: 120),
+            details: "Valid description"
+        ))
+    }
+
+    @Test func maintenanceTitleExceedsMaximumLength() {
+        #expect(!MaintenanceValidation.validate(
+            title: String(repeating: "A", count: 121),
+            details: "Valid description"
+        ))
+    }
+
+    @Test func maintenanceDetailsAtMaximumLength() {
+        #expect(MaintenanceValidation.validate(
+            title: "Water leak",
+            details: String(repeating: "A", count: 2000)
+        ))
+    }
+
+    @Test func maintenanceDetailsExceedMaximumLength() {
+        #expect(!MaintenanceValidation.validate(
+            title: "Water leak",
+            details: String(repeating: "A", count: 2001)
+        ))
+    }
 }

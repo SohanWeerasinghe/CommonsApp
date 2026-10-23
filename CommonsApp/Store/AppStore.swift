@@ -1427,10 +1427,18 @@ final class AppStore: ObservableObject {
         }
         let cleanTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
         let cleanDetails = details.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !cleanTitle.isEmpty, cleanTitle.count <= 120,
-              !cleanDetails.isEmpty, cleanDetails.count <= 2000 else {
-            throw NSError(domain: "CommonsApp.Maintenance", code: 400,
-                          userInfo: [NSLocalizedDescriptionKey: "Check the title and description lengths."])
+
+        guard MaintenanceValidation.validate(
+            title: title,
+            details: details
+        ) else {
+            throw NSError(
+                domain: "CommonsApp.Maintenance",
+                code: 400,
+                userInfo: [
+                    NSLocalizedDescriptionKey: "Check the title and description lengths."
+                ]
+            )
         }
         // Keep the existing method signature so the SwiftUI form is unchanged.
         // The image remains only in the current on-device form session.
